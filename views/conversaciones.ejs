@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <title>Conversaciones - MdI MultiWA</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Rubik', sans-serif;
+            background: #EDEDED;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 32px;
+            padding: 30px;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #5351A5;
+            font-weight: 700;
+            font-size: 1.6rem;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .btn-borrar {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            cursor: pointer;
+        }
+        .conversacion-card {
+            background: #f8f9ff;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #5351A5;
+        }
+        .conversacion-header {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .conversacion-nombre {
+            font-weight: 700;
+            color: #5351A5;
+        }
+        .conversacion-numero, .conversacion-origen {
+            color: #6c6c7a;
+            font-size: 0.9rem;
+        }
+        .conversacion-mensaje {
+            background: white;
+            padding: 15px;
+            border-radius: 16px;
+            margin: 15px 0;
+        }
+        .estado {
+            display: inline-block;
+            background: #e2e8f0;
+            padding: 4px 12px;
+            border-radius: 40px;
+            font-size: 0.8rem;
+        }
+        .respuesta-auto {
+            background: #e0f2fe;
+            padding: 12px;
+            border-radius: 16px;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            color: #6c6c7a;
+        }
+        .nav-links {
+            margin-top: 30px;
+            text-align: center;
+        }
+        a { color: #5351A5; text-decoration: none; }
+        .origen-badge {
+            background: #e0e7ff;
+            color: #5351A5;
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 0.75rem;
+            margin-left: 10px;
+        }
+        .imagen-campana {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-top: 10px;
+            border: 2px solid #e0e7ff;
+            cursor: pointer;
+        }
+        .imagen-campana:hover { opacity: 0.85; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="logo">
+        MOLINO de IDEAS
+    </div>
+    <div class="toolbar">
+        <h2>💬 Conversaciones <span class="count-badge" id="conversacion-count"><%= conversaciones ? conversaciones.length : 0 %></span></h2>
+        <button id="btn-borrar-todo" class="btn-borrar">🗑️ Borrar todas</button>
+    </div>
+    <div id="conversaciones-lista">
+        <% if (conversaciones && conversaciones.length > 0) { %>
+            <% conversaciones.forEach(conv => { %>
+            <div class="conversacion-card" data-id="<%= conv.id %>">
+                <div class="conversacion-header">
+                    <div>
+                        <span class="conversacion-nombre"><%= conv.nombre || 'Desconocido' %></span>
+                        <span class="conversacion-numero">📞 <%= conv.numero || '-' %></span>
+                        <span class="origen-badge">📲 Desde: <%= conv.origenNumero || 'desconocido' %></span>
+                    </div>
+                    <span><%= conv.fecha || '' %></span>
+                </div>
+                <div class="conversacion-mensaje">"<%= conv.mensaje || '' %>"</div>
+                <span class="estado"><%= conv.estado || 'pendiente' %></span>
+                <% if (conv.imagenCampana) { %>
+                <div style="margin-top:10px;">
+                    <a href="/uploads/<%= conv.imagenCampana %>" target="_blank">
+                        <img src="/uploads/<%= conv.imagenCampana %>" class="imagen-campana" alt="Imagen enviada" title="Ver imagen completa">
+                    </a>
+                </div>
+                <% } %>
+                <% if (conv.respuesta) { %>
+                <div class="respuesta-auto">🤖 Respuesta: <%= conv.respuesta.substring(0, 150) %>...</div>
+                <% } %>
+            </div>
+            <% }) %>
+        <% } else { %>
+            <div class="empty-state">📭 No hay conversaciones guardadas</div>
+        <% } %>
+    </div>
+    <div class="nav-links">
+        <a href="/">← Volver al inicio</a> | <a href="/monitor">📡 Monitor</a>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const container = document.getElementById('conversaciones-lista');
+    const countBadge = document.getElementById('conversacion-count');
+
+    // Actualizar contador
+    function actualizarContador() {
+        const cards = container.querySelectorAll('.conversacion-card');
+        countBadge.innerText = cards.length;
+    }
+
+    // Eliminar estado vacío si existe
+    function removerEmptyState() {
+        const empty = container.querySelector('.empty-state');
+        if (empty) empty.remove();
+    }
+
+    socket.on('nueva_respuesta', (conv) => {
+        // Evitar duplicados por ID
+        const existing = container.querySelector(`[data-id="${conv.id}"]`);
+        if (existing) {
+            // Actualizar contenido si es necesario (opcional)
+            return;
+        }
+
+        removerEmptyState();
+
+        const origen = conv.origenNumero || 'desconocido';
+        const card = document.createElement('div');
+        card.className = 'conversacion-card';
+        card.dataset.id = conv.id;
+        card.innerHTML = `
+            <div class="conversacion-header">
+                <div>
+                    <span class="conversacion-nombre">${escapeHtml(conv.nombre || 'Desconocido')}</span>
+                    <span class="conversacion-numero">📞 ${escapeHtml(conv.numero || '-')}</span>
+                    <span class="origen-badge">📲 Desde: ${escapeHtml(origen)}</span>
+                </div>
+                <span>${escapeHtml(conv.fecha || '')}</span>
+            </div>
+            <div class="conversacion-mensaje">"${escapeHtml(conv.mensaje || '')}"</div>
+            <span class="estado">${conv.estado || 'pendiente'}</span>
+            ${conv.imagenCampana ? `<div style="margin-top:10px;"><a href="/uploads/${conv.imagenCampana}" target="_blank"><img src="/uploads/${conv.imagenCampana}" class="imagen-campana" alt="Imagen enviada"></a></div>` : ''}
+            ${conv.respuesta ? `<div class="respuesta-auto">🤖 Respuesta: ${escapeHtml(conv.respuesta.substring(0,150))}...</div>` : ''}
+        `;
+        container.insertBefore(card, container.firstChild);
+        actualizarContador();
+    });
+
+    document.getElementById('btn-borrar-todo').addEventListener('click', async () => {
+        const total = container.querySelectorAll('.conversacion-card').length;
+        if (total === 0) {
+            alert('No hay conversaciones para borrar.');
+            return;
+        }
+        if (confirm(`⚠️ ¿Borrar TODAS las ${total} conversaciones de TODAS las cuentas? Esta acción no se puede deshacer.`)) {
+            try {
+                const res = await fetch('/borrar-todas-conversaciones', { method: 'POST' });
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    const err = await res.json();
+                    alert('Error al borrar: ' + (err.error || 'desconocido'));
+                }
+            } catch (e) {
+                alert('Error de red: ' + e.message);
+            }
+        }
+    });
+
+    // Actualizar contador inicial
+    actualizarContador();
+
+    function escapeHtml(s) {
+        if (!s) return '';
+        return s.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cargar Contactos</title>
+    <style>
+        body { font-family: sans-serif; background: linear-gradient(135deg, #667eea, #764ba2); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .container { background: white; border-radius: 20px; max-width: 600px; padding: 40px; }
+        h1 { color: #333; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; }
+        .tab { padding: 10px 20px; cursor: pointer; border: none; background: none; }
+        .tab.active { color: #667eea; border-bottom: 2px solid #667eea; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        input[type="text"] { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #cbd5e0; border-radius: 8px; }
+        .upload-area { border: 2px dashed #667eea; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; }
+        .btn { background: #667eea; color: white; border: none; padding: 14px; border-radius: 10px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-drive { background: #34a853; }
+        .nav-links { text-align: center; margin-top: 20px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📋 Cargar Contactos</h1>
+    
+    <div class="tabs">
+        <button class="tab active" onclick="cambiarTab('drive')">📱 Google Drive</button>
+        <button class="tab" onclick="cambiarTab('archivo')">📁 Subir Archivo</button>
+    </div>
+    
+    <div id="tab-drive" class="tab-content active">
+        <input type="text" id="url-drive" placeholder="https://docs.google.com/spreadsheets/d/..." />
+        <button class="btn btn-drive" onclick="cargarDesdeDrive()">🔗 Cargar desde Google Drive</button>
+        <p style="font-size: 0.85em; color: #666; margin-top: 10px;">⚠️ El archivo debe ser público</p>
+    </div>
+    
+    <div id="tab-archivo" class="tab-content">
+        <div class="upload-area" id="drop-area">
+            <div style="font-size: 48px;">📁</div>
+            <p>Haz clic o arrastra tu archivo Excel</p>
+            <p style="color: #999;">.xlsx, .xls</p>
+        </div>
+        <input type="file" id="file-input" accept=".xlsx,.xls" style="display: none;">
+        <div id="file-info" style="display: none; background: #f0fdf4; padding: 12px; border-radius: 8px; margin: 15px 0;">
+            <span id="file-name"></span>
+            <button onclick="removerArchivo()" style="float: right; background: #fee2e2; border: none; padding: 5px 10px; border-radius: 5px;">✕</button>
+        </div>
+        <button class="btn" id="btn-cargar" onclick="cargarArchivo()" disabled>📤 Cargar Archivo</button>
+    </div>
+    
+    <div class="nav-links">
+        <a href="/">← Volver</a>
+    </div>
+</div>
+
+<script>
+    function cambiarTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelector(`[onclick="cambiarTab('${tab}')"]`).classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+    }
+    
+    let archivo = null;
+    const drop = document.getElementById('drop-area');
+    const input = document.getElementById('file-input');
+    
+    drop?.addEventListener('click', () => input.click());
+    drop?.addEventListener('dragover', e => e.preventDefault());
+    drop?.addEventListener('drop', e => {
+        e.preventDefault();
+        if (e.dataTransfer.files.length) manejarArchivo(e.dataTransfer.files[0]);
+    });
+    input?.addEventListener('change', e => { if (e.target.files.length) manejarArchivo(e.target.files[0]); });
+    
+    function manejarArchivo(f) {
+        if (!f.name.endsWith('.xlsx') && !f.name.endsWith('.xls')) { alert('Formato inválido'); return; }
+        archivo = f;
+        document.getElementById('file-name').textContent = f.name;
+        document.getElementById('file-info').style.display = 'block';
+        document.getElementById('btn-cargar').disabled = false;
+    }
+    
+    function removerArchivo() {
+        archivo = null;
+        input.value = '';
+        document.getElementById('file-info').style.display = 'none';
+        document.getElementById('btn-cargar').disabled = true;
+    }
+    
+    async function cargarDesdeDrive() {
+        const url = document.getElementById('url-drive').value.trim();
+        if (!url) return alert('Ingresá URL');
+        const btn = document.querySelector('.btn-drive');
+        btn.disabled = true;
+        btn.textContent = '⏳ Cargando...';
+        try {
+            const res = await fetch(
+
+    '/api/carga/cargar',
+
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urlDrive: url }) });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error);
+            alert(`✅ ${d.total} contactos`);
+            location.href = '/';
+        } catch (e) {
+            alert('❌ ' + e.message);
+            btn.disabled = false;
+            btn.textContent = '🔗 Cargar desde Google Drive';
+        }
+    };
+}
+    
+    async function cargarArchivo() {
+        if (!archivo) return;
+        const btn = document.getElementById('btn-cargar');
+        btn.disabled = true;
+        btn.textContent = '⏳ Cargando...';
+        const fd = new FormData();
+        fd.append('excel', archivo);
+        try {
+            const res = await fetch('/cargar', { method: 'POST', body: fd });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error);
+            alert(`✅ ${d.total} contactos`);
+            location.href = '/';
+        } catch (e) {
+            alert('❌ ' + e.message);
+            btn.disabled = false;
+            btn.textContent = '📤 Cargar Archivo';
+        }
+    }
+</script>
+</body>
+</html>

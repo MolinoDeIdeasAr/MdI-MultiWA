@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <title>Monitor - MdI MultiWA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        h1 { color: #38bdf8; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .status { padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 25px; }
+        .online { background-color: #15803d; color: #dcfce7; border-left: 5px solid #22c55e; }
+        .offline { background-color: #7f1d1d; color: #fee2e2; border-left: 5px solid #ef4444; }
+        .warning { background-color: #78350f; color: #fef3c7; border-left: 5px solid #f59e0b; }
+        .progress-bar-container { background-color: #334155; border-radius: 10px; height: 20px; margin: 20px 0; overflow: hidden; }
+        .progress-bar { background-color: #22c55e; height: 100%; border-radius: 10px; width: 0%; transition: width 0.5s ease; }
+        .stats { display: flex; gap: 20px; justify-content: space-between; margin: 20px 0; flex-wrap: wrap; }
+        .stat-card { background: #0f172a; padding: 15px; border-radius: 10px; flex: 1; text-align: center; min-width: 100px; border: 1px solid #334155; }
+        .stat-number { font-size: 2em; font-weight: bold; color: #38bdf8; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #f8fafc; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #334155; font-size: 13px; }
+        th { background-color: #334155; color: #f8fafc; }
+        .btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin: 5px; font-weight: bold; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn-pause { background: #f59e0b; }
+        .btn-stop { background: #ef4444; }
+        .nav-links { margin-top: 30px; text-align: center; }
+        a { color: #38bdf8; text-decoration: none; margin: 0 10px; }
+        a:hover { text-decoration: underline; }
+        .refresh-btn { background: #3b82f6; color: white; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 0.9em; }
+        .selector-container { background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+        .selector-container select { padding: 8px 12px; border-radius: 6px; background: #1e293b; color: white; border: 1px solid #334155; cursor: pointer; }
+        .instancia-info { font-size: 0.85em; color: #94a3b8; margin-top: 4px; }
+        .rubro-badge { background: #334155; padding: 8px 15px; border-radius: 20px; display: inline-block; margin-bottom: 15px; font-size: 0.9em; }
+        .log-container { background: #0f172a; height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; padding: 10px; border-radius: 8px; border: 1px solid #334155; margin-top: 10px; }
+        .log-line { padding: 2px 0; border-bottom: 1px solid #1e293b; word-break: break-all; }
+        .contact-table-wrapper { overflow-x: auto; max-height: 400px; overflow-y: auto; border-radius: 8px; }
+        .enviado { color: #86efac; }
+        .fallido { color: #f87171; }
+        .pendiente { color: #94a3b8; }
+        .seccion { margin-top: 25px; }
+        .seccion h3 { color: #94a3b8; margin-bottom: 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>
+        <img src="/logo_MdI.png" style="width:40px; height:40px; border-radius:50%; object-fit:cover; vertical-align:middle;">
+        Monitor de Campaña
+        <button class="refresh-btn" onclick="location.reload()">🔄 Recargar</button>
+    </h1>
+
+    <!-- SELECTOR DE INSTANCIAS -->
+    <div class="selector-container">
+        <div>
+            <form action="/seleccionar-instancia" method="POST" id="formSelectorInstancia">
+                <select name="instanceId" id="selectorInstancias" onchange="cambiarInstancia()">
+                    <% if (instancias && instancias.length > 0) { %>
+                        <% instancias.forEach(inst => { %>
+                            <%
+                                // FIX: comparar con activeId (no activeInstanceId)
+                                const esActiva = inst.id === activeId;
+                                const etiqueta = inst.numero ? inst.numero : 'Sin número (' + inst.id.slice(-6) + ')';
+                            %>
+                            <option value="<%= inst.id %>" <%= esActiva ? 'selected' : '' %>>
+                                <%= etiqueta %> <%= inst.listo ? '✅' : '❌' %>
+                            </option>
+                        <% }) %>
+                    <% } else { %>
+                        <option value="">Sin instancias configuradas</option>
+                    <% } %>
+                </select>
+                <div class="instancia-info">Seleccioná una cuenta para ver sus datos</div>
+            </form>
+        </div>
+        <form action="/nueva-instancia" method="POST">
+            <button type="submit" class="btn" style="background:#3b82f6; margin:0;">➕ Nueva cuenta</button>
+        </form>
+    </div>
+
+    <!-- ESTADO DE CONEXIÓN -->
+    <% if (estado && estado.listo) { %>
+        <div class="status online">
+            ✅ WhatsApp Conectado<% if (estado.numeroWhatsApp) { %> — <%= estado.numeroWhatsApp %><% } %>
+        </div>
+    <% } else if (estado && !estado.listo) { %>
+        <div class="status warning">
+            ⚠️ WhatsApp Desconectado — Mostrando datos históricos
+        </div>
+    <% } else { %>
+        <div class="status offline">
+            ❌ Sin instancia activa — <a href="/" style="color:#fca5a5;">Ir al inicio</a>
+        </div>
+    <% } %>
+
+    <!-- RUBRO -->
+    <% if (estado && estado.rubro) { %>
+        <div class="rubro-badge">🏷️ Rubro: <strong><%= estado.rubro %></strong></div>
+    <% } %>
+
+    <!-- ESTADÍSTICAS -->
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-number" id="stat-total"><%= estado ? (estado.total || 0) : 0 %></div>
+            <div>Total</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-actual"><%= estado ? (estado.actual || 0) : 0 %></div>
+            <div>Procesados</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-enviados" style="color:#86efac;"><%= estado ? (estado.enviadosOk || 0) : 0 %></div>
+            <div>Enviados</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="stat-fallidos" style="color:#f87171;"><%= estado ? (estado.fallidos ? estado.fallidos.length : 0) : 0 %></div>
+            <div>Fallidos</div>
+        </div>
+        <div class="stat-card">
+            <%
+                const cantBajas = estado ? (estado.contactosCargados || []).filter(c => c.estadoEnvio === 'baja').length : 0;
+            %>
+            <div class="stat-number" id="stat-bajas" style="color:#fb923c;"><%= cantBajas %></div>
+            <div>Bajas</div>
+        </div>
+    </div>
+
+    <!-- BARRA DE PROGRESO -->
+    <%
+        const pTotal = estado ? (estado.total || 0) : 0;
+        const pActual = estado ? (estado.actual || 0) : 0;
+        const pPct = pTotal > 0 ? Math.round((pActual / pTotal) * 100) : 0;
+    %>
+    <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar" style="width: <%= pPct %>%;"></div>
+    </div>
+    <div style="text-align:right; font-size:12px; color:#94a3b8; margin-top:4px;" id="pct-label"><%= pPct %>%</div>
+
+    <!-- PANEL DE ESTADO EN VIVO -->
+    <div id="panel-en-vivo" style="display:none; margin:15px 0; padding:14px 18px; border-radius:10px; background:#0f172a; border:1px solid #334155;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <div id="en-vivo-spinner" style="width:14px; height:14px; border:2px solid #334155; border-top-color:#38bdf8; border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+            <strong id="en-vivo-motivo" style="color:#f8fafc; font-size:14px;">Esperando actualización...</strong>
+        </div>
+        <div id="en-vivo-detalle" style="font-size:13px; color:#94a3b8; margin-left:24px;"></div>
+        <div id="en-vivo-countdown" style="font-size:24px; font-weight:bold; color:#38bdf8; margin:8px 0 4px 24px; display:none;"></div>
+        <div id="en-vivo-limites" style="font-size:11px; color:#64748b; margin-left:24px; margin-top:6px;"></div>
+    </div>
+    <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+    <!-- CONTROLES DE CAMPAÑA -->
+    <% if (estado && estado.enviando && !estado.campanaFinalizada) { %>
+        <div style="margin: 15px 0;">
+            <button id="btn-pausar" class="btn btn-pause">⏸️ Pausar</button>
+            <button id="btn-detener" class="btn btn-stop">⛔ Detener</button>
+        </div>
+    <% } else if (estado && estado.campanaFinalizada && pTotal > 0) { %>
+        <div class="status online" style="margin:15px 0;">
+            ✅ Campaña finalizada — <%= pActual %> procesados, <%= estado.enviadosOk || 0 %> enviados
+        </div>
+    <% } %>
+
+    <!-- TABLA DE CONTACTOS -->
+    <div class="seccion">
+        <h3 id="titulo-contactos">📋 Contactos cargados (<%= estado ? (estado.contactosCargados ? estado.contactosCargados.length : 0) : 0 %>)</h3>
+        <div class="contact-table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nombre</th>
+                        <th>Número</th>
+                        <th>Estado</th>
+                        <th>Hora</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-contactos">
+                    <% if (estado && estado.contactosCargados && estado.contactosCargados.length > 0) { %>
+                        <% estado.contactosCargados.slice(0, 200).forEach((c, i) => { %>
+                            <tr>
+                                <td style="color:#64748b;"><%= i + 1 %></td>
+                                <td><%= c.NOMBRE || c.nombre || '-' %></td>
+                                <td><%= c.NUMERO || c.numero || '-' %></td>
+                                <td class="<%= c.estadoEnvio || 'pendiente' %>">
+                                    <% if (c.estadoEnvio === 'enviado') { %>✅ enviado
+                                    <% } else if (c.estadoEnvio === 'fallido') { %>❌ fallido
+                                    <% } else if (c.estadoEnvio === 'baja') { %>🚫 baja
+                                    <% } else { %>⏳ pendiente<% } %>
+                                </td>
+                                <td style="font-size:11px; color:#64748b;">
+                                    <%= c.fechaEnvio ? new Date(c.fechaEnvio).toLocaleTimeString('es-AR') : '-' %>
+                                </td>
+                            </tr>
+                        <% }) %>
+                        <% if (estado.contactosCargados.length > 200) { %>
+                            <tr>
+                                <td colspan="5" style="text-align:center; color:#64748b; padding:15px;">
+                                    ... y <%= estado.contactosCargados.length - 200 %> más (mostrando primeros 200)
+                                </td>
+                            </tr>
+                        <% } %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="5" style="text-align:center; color:#64748b; padding:20px;">
+                                No hay contactos cargados en esta instancia.
+                                <a href="/cargar">Cargar contactos →</a>
+                            </td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TABLA DE FALLIDOS -->
+    <% if (estado && estado.fallidos && estado.fallidos.length > 0) { %>
+        <div class="seccion">
+            <h3>❌ Envíos fallidos (<%= estado.fallidos.length %>)</h3>
+            <div class="contact-table-wrapper">
+                <table>
+                    <thead><tr><th>Nombre</th><th>Número</th><th>Error</th></tr></thead>
+                    <tbody>
+                        <% estado.fallidos.slice(0, 100).forEach(f => { %>
+                            <tr>
+                                <td><%= f.nombre || '-' %></td>
+                                <td><%= f.numero || '-' %></td>
+                                <td style="color:#f87171; font-size:12px;"><%= f.error || '-' %></td>
+                            </tr>
+                        <% }) %>
+                        <% if (estado.fallidos.length > 100) { %>
+                            <tr><td colspan="3" style="color:#64748b; text-align:center;">... y <%= estado.fallidos.length - 100 %> más</td></tr>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- LOGS EN TIEMPO REAL -->
+    <div class="seccion">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <h3 style="margin:0;">📜 Logs del sistema</h3>
+            <button id="clear-logs-btn" style="background:#334155; color:#f8fafc; border:none; padding:4px 10px; border-radius:6px; cursor:pointer; font-size:12px;">Limpiar</button>
+            <span id="log-status" style="font-size:11px; color:#64748b;">Conectando...</span>
+        </div>
+        <div id="log-container" class="log-container">
+            <div style="color:#64748b;">⏳ Esperando eventos del servidor...</div>
+        </div>
+    </div>
+
+    <div class="nav-links">
+        <a href="/">← Inicio</a>
+        <a href="/cargar">📂 Cargar contactos</a>
+        <a href="/conversaciones">💬 Conversaciones</a>
+        <a href="/bajas">🚫 Bajas</a>
+        <a href="/config-antibaneo">⚙️ Anti-Baneo</a>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    // ─────────────────────────────────────────────
+    //  ESTADO INICIAL desde EJS
+    // ─────────────────────────────────────────────
+    const estadoInicial = {
+        campañaActiva: <%= (estado && estado.enviando && !estado.campanaFinalizada) ? 'true' : 'false' %>,
+        total: <%= estado ? (estado.total || 0) : 0 %>,
+        actual: <%= estado ? (estado.actual || 0) : 0 %>,
+        enviadosOk: <%= estado ? (estado.enviadosOk || 0) : 0 %>,
+        fallidos: <%= estado ? (estado.fallidos ? estado.fallidos.length : 0) : 0 %>,
+        campanaFinalizada: <%= (estado && estado.campanaFinalizada) ? 'true' : 'false' %>
+    };
+
+    // ─────────────────────────────────────────────
+    //  CAMBIO DE INSTANCIA
+    // ─────────────────────────────────────────────
+    function cambiarInstancia() {
+        document.getElementById('formSelectorInstancia').submit();
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement('div');
+        div.textContent = str || '';
+        return div.innerHTML;
+    }
+
+    function badgeEstado(estadoEnvio) {
+        if (estadoEnvio === 'enviado') return '✅ enviado';
+        if (estadoEnvio === 'fallido') return '❌ fallido';
+        if (estadoEnvio === 'baja') return '🚫 baja';
+        return '⏳ pendiente';
+    }
+
+    // ─────────────────────────────────────────────
+    //  ACTUALIZAR PROGRESO + TABLA DESDE /progreso
+    // ─────────────────────────────────────────────
+    let ultimaCampañaActiva = estadoInicial.campañaActiva;
+
+    function actualizarProgreso() {
+        fetch('/progreso')
+            .then(function(res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json();
+            })
+            .then(function(data) {
+                // Stats
+                document.getElementById('stat-total').innerText    = data.total || 0;
+                document.getElementById('stat-actual').innerText   = data.actual || 0;
+                document.getElementById('stat-enviados').innerText = data.enviadosOk || 0;
+                document.getElementById('stat-fallidos').innerText = data.fallidos ? data.fallidos.length : 0;
+                var statBajas = document.getElementById('stat-bajas');
+                if (statBajas) statBajas.innerText = data.bajasCount || 0;
+
+                // Barra de progreso
+                var pct = data.total > 0 ? Math.round((data.actual / data.total) * 100) : 0;
+                document.getElementById('progressBar').style.width = pct + '%';
+                document.getElementById('pct-label').innerText = pct + '%';
+
+                // Título de la tabla
+                var titulo = document.getElementById('titulo-contactos');
+                if (titulo && data.totalContactos !== undefined) {
+                    titulo.textContent = '📋 Contactos cargados (' + data.totalContactos + ')';
+                }
+
+                // FIX: actualizar tabla de contactos sin recargar la página
+                var tbody = document.getElementById('tbody-contactos');
+                if (tbody && data.contactosCargados) {
+                    if (data.contactosCargados.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#64748b; padding:20px;">No hay contactos cargados.</td></tr>';
+                    } else {
+                        var html = '';
+                        data.contactosCargados.forEach(function(c, i) {
+                            var hora = c.fechaEnvio ? new Date(c.fechaEnvio).toLocaleTimeString('es-AR') : '-';
+                            html += '<tr>' +
+                                '<td style="color:#64748b;">' + (i + 1) + '</td>' +
+                                '<td>' + escapeHtml(c.NOMBRE || '-') + '</td>' +
+                                '<td>' + escapeHtml(c.NUMERO || '-') + '</td>' +
+                                '<td class="' + (c.estadoEnvio || 'pendiente') + '">' + badgeEstado(c.estadoEnvio) + '</td>' +
+                                '<td style="font-size:11px; color:#64748b;">' + hora + '</td>' +
+                                '</tr>';
+                        });
+                        tbody.innerHTML = html;
+                    }
+                }
+
+                // ── Panel de estado en vivo del anti-baneo ──
+                var panel = document.getElementById('panel-en-vivo');
+                if (panel) {
+                    var motivoEl = document.getElementById('en-vivo-motivo');
+                    var detalleEl = document.getElementById('en-vivo-detalle');
+                    var countdownEl = document.getElementById('en-vivo-countdown');
+                    var limitesEl = document.getElementById('en-vivo-limites');
+                    var spinnerEl = document.getElementById('en-vivo-spinner');
+
+                    if (data.enviando && data.enVivo) {
+                        panel.style.display = 'block';
+                        var ev = data.enVivo;
+
+                        var iconos = {
+                            'enviando': '📤',
+                            'pausa_antibaneo': '⏳',
+                            'esperando_limite': '🛑',
+                            'esperando_horario': '🌙',
+                            'pausada': '⏸️',
+                            'finalizada': '✅'
+                        };
+                        var icono = iconos[ev.fase] || '📡';
+                        motivoEl.textContent = icono + ' ' + (ev.motivo || 'Procesando...');
+                        detalleEl.textContent = ev.proximoContacto
+                            ? (ev.fase === 'enviando' ? 'Enviando a: ' : 'Próximo: ') + ev.proximoContacto
+                            : '';
+
+                        if (ev.segundosRestantes && ev.segundosRestantes > 0) {
+                            countdownEl.style.display = 'block';
+                            var min = Math.floor(ev.segundosRestantes / 60);
+                            var seg = ev.segundosRestantes % 60;
+                            countdownEl.textContent = (min > 0 ? min + 'm ' : '') + seg + 's';
+                            spinnerEl.style.display = 'none';
+                        } else {
+                            countdownEl.style.display = 'none';
+                            spinnerEl.style.display = 'block';
+                        }
+
+                        limitesEl.textContent = '📊 Hoy: ' + (data.mensajesHoy || 0) + '/' + data.limiteDia +
+                            ' · Esta hora: ' + (data.mensajesHora || 0) + '/' + data.limiteHora;
+                    } else {
+                        panel.style.display = 'none';
+                    }
+                }
+
+                // Si la campaña pasó de activa a finalizada, recargar una vez
+                // para mostrar el bloque de "campaña finalizada" y los botones correctos
+                var ahoraActiva = data.enviando && !data.campanaFinalizada;
+                if (ultimaCampañaActiva && !ahoraActiva) {
+                    clearInterval(intervaloProgreso);
+                    setTimeout(function() { location.reload(); }, 1500);
+                }
+                ultimaCampañaActiva = ahoraActiva;
+            })
+            .catch(function(e) { console.warn('Error actualizando progreso:', e.message); });
+    }
+
+    // FIX: el polling corre siempre cada 5s (no solo con campaña activa)
+    // así la tabla y stats se mantienen frescas aunque entres a mirar sin enviar nada
+    let intervaloProgreso = setInterval(actualizarProgreso, 2000);
+    // Primera actualización inmediata
+    actualizarProgreso();
+
+    // ─────────────────────────────────────────────
+    //  BOTONES PAUSA / DETENER
+    // ─────────────────────────────────────────────
+    const btnPausar = document.getElementById('btn-pausar');
+    const btnDetener = document.getElementById('btn-detener');
+
+    if (btnPausar) {
+        btnPausar.addEventListener('click', () => {
+            btnPausar.disabled = true;
+            btnPausar.textContent = '⏳...';
+            fetch('/pausar', { method: 'POST' })
+                .then(() => location.reload())
+                .catch(() => location.reload());
+        });
+    }
+
+    if (btnDetener) {
+        btnDetener.addEventListener('click', () => {
+            if (!confirm('¿Detener la campaña? Los mensajes ya enviados no se pueden deshacer.')) return;
+            btnDetener.disabled = true;
+            btnDetener.textContent = '⏳ Deteniendo...';
+            fetch('/detener', { method: 'POST' })
+                .then(() => location.reload())
+                .catch(() => location.reload());
+        });
+    }
+
+    // ─────────────────────────────────────────────
+    //  SOCKET.IO — LOGS EN TIEMPO REAL
+    // ─────────────────────────────────────────────
+    const socket = io();
+    const logContainer = document.getElementById('log-container');
+    const logStatus    = document.getElementById('log-status');
+    const clearBtn     = document.getElementById('clear-logs-btn');
+    let primeraLinea = true;
+
+    socket.on('connect', () => {
+        logStatus.textContent = '🟢 Conectado';
+        logStatus.style.color = '#86efac';
+    });
+
+    socket.on('disconnect', () => {
+        logStatus.textContent = '🔴 Desconectado';
+        logStatus.style.color = '#f87171';
+    });
+
+    socket.on('server_log', (data) => {
+        if (primeraLinea) {
+            logContainer.innerHTML = '';
+            primeraLinea = false;
+        }
+
+        const line = document.createElement('div');
+        line.className = 'log-line';
+
+        const colores = { error: '#f87171', warn: '#fbbf24', log: '#86efac' };
+        line.style.color = colores[data.type] || '#cbd5e1';
+        line.textContent = `[${data.timestamp}] ${data.message}`;
+
+        logContainer.appendChild(line);
+        logContainer.scrollTop = logContainer.scrollHeight;
+
+        // Límite de 500 líneas
+        while (logContainer.children.length > 500) {
+            logContainer.removeChild(logContainer.firstChild);
+        }
+    });
+
+    // FIX: actualizar lista de instancias sin recargar página
+    socket.on('instances_update', (data) => {
+        console.log('🔄 Instancias actualizadas:', data.instancias?.length);
+        // Actualizar selector si hay cambios relevantes
+        if (data.instancias) {
+            const selector = document.getElementById('selectorInstancias');
+            if (selector) {
+                data.instancias.forEach(inst => {
+                    const opt = selector.querySelector(`option[value="${inst.id}"]`);
+                    if (opt) {
+                        const etiqueta = inst.numero || `Sin número (${inst.id.slice(-6)})`;
+                        opt.textContent = `${etiqueta} ${inst.listo ? '✅' : '❌'}`;
+                    }
+                });
+            }
+        }
+    });
+
+    socket.on('whatsapp_ready', (data) => {
+        console.log('✅ WhatsApp listo:', data);
+        // Recargar suavemente para mostrar el estado actualizado
+        setTimeout(() => location.reload(), 1000);
+    });
+
+    clearBtn.addEventListener('click', () => {
+        logContainer.innerHTML = '<div style="color:#64748b;">🔄 Logs limpiados</div>';
+        primeraLinea = true;
+    });
+</script>
+</body>
+</html>

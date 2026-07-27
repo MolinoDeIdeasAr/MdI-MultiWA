@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iniciar Sesión - MdI CRM</title>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .login-box { background: #1e293b; padding: 40px; border-radius: 12px; width: 100%; max-width: 400px; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
+        button { background: #3b82f6; font-weight: bold; cursor: pointer; }
+        .error { background: #fee2e2; color: #b91c1c; padding: 10px; border-radius: 8px; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+<div class="login-box">
+    <h2>🔐 Molino de Ideas CRM</h2>
+    <% if (typeof error !== 'undefined' && error) { %>
+        <div class="error"><%= error %></div>
+    <% } %>
+    <form method="POST" action="/login">
+        <input type="text" name="username" placeholder="Usuario" required>
+        <input type="password" name="password" placeholder="Contraseña" required>
+        <button type="submit">Ingresar</button>
+    </form>
+    <hr style="border-color: #334155; margin: 20px 0;">
+    <form method="POST" action="/register">
+        <h3>Registrar nuevo usuario</h3>
+        <input type="text" name="username" placeholder="Usuario" required>
+        <input type="password" name="password" placeholder="Contraseña" required>
+        <input type="text" name="nombre" placeholder="Nombre completo" required>
+        <input type="text" name="notificacion" placeholder="WhatsApp notificaciones (5493513588244)" required>
+        <button type="submit" style="background: #22c55e;">Registrar</button>
+    </form>
+</div>
+</body>
+</html>

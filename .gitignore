@@ -1,0 +1,101 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno
+.env
+.env.*
+
+# WhatsApp
+.wwebjs_auth/
+.wwebjs_cache/
+sessions/
+chrome-profiles/
+
+# Temporales
+tmp/
+temp/
+logs/
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# VS Code
+.vscode/
+
+# Reportes temporales
+reportes/*.tmp
+
+# Archivos de respaldo
+*.bak
+*.old
+*.orig
+
+# Python
+__pycache__/
+*.pyc
+
+# Archivos de sesión
+*.session
+
+# Archivos privados
+claves.pdf
+*.lnk
+
+# Continuation
+.continue/
+
+# Excels temporales
+archivo_drive.xlsx
+
+# Reportes
+*.csv
+
+# ==========================
+# DATOS PRIVADOS MdI MultiWA
+# ==========================
+
+users.json
+estado.json
+estado_guardado.json
+historial_numeros.json
+CRM_MdI.xlsx
+CRM_Molino_Ideas_Master.xlsx
+archivo_drive.xlsx
+MdI_MultiWA_Seguimiento.docx
+claves.pdf
+*.lnk
+.continue/
+# Datos privados
+data/
+reportes/
+
+# CRM
+CRM_*.xlsx
+archivo_drive.xlsx
+
+# Documentos internos
+*.docx
+*.pdf
+
+# Configuración personal
+.clinerules
+
+# Carpetas privadas MdI MultiWA
+data/
+reportes/
+
+# Configuración privada
+config/
+
+# Documentos internos
+CRM_MdI.xlsx
+CRM_Molino_Ideas_Master.xlsx
+archivo_drive.xlsx
+MdI_MultiWA_Seguimiento.docx
+claves.pdf
+*.lnk
+.continue/
+.clinerules

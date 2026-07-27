@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración Anti-Baneo - MdI MultiWA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
+        .container { max-width: 700px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        h1 { color: #38bdf8; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 25px; }
+
+        .seccion { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-bottom: 18px; }
+        .seccion h3 { color: #f8fafc; font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+        .campo { margin-bottom: 16px; }
+        .campo:last-child { margin-bottom: 0; }
+        .campo label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
+        .campo .ayuda { font-size: 11px; color: #64748b; margin-top: 4px; }
+        .campo input { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 14px; }
+        .campo input:focus { outline: none; border-color: #38bdf8; }
+
+        .fila-doble { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        .preset-buttons { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+        .preset-btn { background: #334155; color: #f8fafc; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: background 0.2s; }
+        .preset-btn:hover { background: #475569; }
+        .preset-btn.activo { background: #38bdf8; color: #0f172a; font-weight: bold; }
+
+        .btn-guardar { width: 100%; padding: 14px; background: #15803d; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-guardar:hover { opacity: 0.9; }
+        .btn-guardar:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .alerta { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; display: none; }
+        .alerta-ok { background: #15803d; color: #dcfce7; }
+        .alerta-err { background: #7f1d1d; color: #fee2e2; }
+
+        .resumen { background: #0f172a; border: 1px solid #38bdf8; border-radius: 10px; padding: 16px; margin-top: 20px; font-size: 13px; color: #cbd5e1; line-height: 1.7; }
+        .resumen strong { color: #38bdf8; }
+
+        .nav { margin-top: 25px; text-align: center; }
+        .nav a { color: #38bdf8; text-decoration: none; margin: 0 10px; }
+        .nav a:hover { text-decoration: underline; }
+
+        .warning-box { background: #78350f; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 12px; color: #fef3c7; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>
+        <img src="/logo_MdI.png" style="width:36px; height:36px; border-radius:50%; object-fit:cover;">
+        ⚙️ Configuración Anti-Baneo
+    </h1>
+    <p class="subtitle">Ajustá los límites de envío para proteger tus cuentas de WhatsApp</p>
+
+    <div class="warning-box">
+        ⚠️ Cambiar estos valores afecta el riesgo de baneo. Cuanto más alto el límite, más rápido envías pero mayor el riesgo. Los cambios aplican a las próximas campañas o pausas, no afectan un envío que ya está esperando.
+    </div>
+
+    <div id="alerta-ok" class="alerta alerta-ok"></div>
+    <div id="alerta-err" class="alerta alerta-err"></div>
+
+    <!-- PRESETS RÁPIDOS -->
+    <div class="preset-buttons">
+        <button type="button" class="preset-btn" onclick="aplicarPreset('conservador')">🛡️ Conservador</button>
+        <button type="button" class="preset-btn" onclick="aplicarPreset('moderado')">⚖️ Moderado</button>
+        <button type="button" class="preset-btn" onclick="aplicarPreset('agresivo')">⚡ Agresivo</button>
+    </div>
+
+    <form id="formConfig">
+        <!-- HORARIO -->
+        <div class="seccion">
+            <h3>🕐 Horario de envío</h3>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Hora de inicio</label>
+                    <input type="number" name="HORA_INICIO" id="HORA_INICIO" min="0" max="23" value="<%= config.HORA_INICIO %>">
+                    <div class="ayuda">0-23 (formato 24hs)</div>
+                </div>
+                <div class="campo">
+                    <label>Hora de fin</label>
+                    <input type="number" name="HORA_FIN" id="HORA_FIN" min="0" max="23" value="<%= config.HORA_FIN %>">
+                    <div class="ayuda">0-23 (formato 24hs)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LÍMITES -->
+        <div class="seccion">
+            <h3>📊 Límites de mensajes</h3>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Máximo por hora</label>
+                    <input type="number" name="MAX_MENSAJES_HORA" id="MAX_MENSAJES_HORA" min="1" value="<%= config.MAX_MENSAJES_HORA %>">
+                    <div class="ayuda">Recomendado: 5-20</div>
+                </div>
+                <div class="campo">
+                    <label>Máximo por día</label>
+                    <input type="number" name="MAX_MENSAJES_DIA" id="MAX_MENSAJES_DIA" min="1" value="<%= config.MAX_MENSAJES_DIA %>">
+                    <div class="ayuda">Recomendado: 40-150</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAUSAS -->
+        <div class="seccion">
+            <h3>⏳ Pausas entre mensajes</h3>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Pausa base (segundos)</label>
+                    <input type="number" name="PAUSA_BASE_SEG" id="PAUSA_BASE_SEG" min="5" value="<%= Math.round(config.PAUSA_BASE / 1000) %>">
+                    <div class="ayuda">Tiempo mínimo entre mensajes</div>
+                </div>
+                <div class="campo">
+                    <label>Pausa máxima (segundos)</label>
+                    <input type="number" name="PAUSA_MAX_SEG" id="PAUSA_MAX_SEG" min="5" value="<%= Math.round(config.PAUSA_MAX / 1000) %>">
+                    <div class="ayuda">Tope con ruido aleatorio</div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-guardar" id="btnGuardar">💾 Guardar configuración</button>
+    </form>
+
+    <div class="resumen" id="resumen">
+        <strong>📋 Resumen actual:</strong><br>
+        Envía mensajes de <strong><%= config.HORA_INICIO %>:00</strong> a <strong><%= config.HORA_FIN %>:00</strong>,
+        máximo <strong><%= config.MAX_MENSAJES_HORA %></strong> mensajes por hora y
+        <strong><%= config.MAX_MENSAJES_DIA %></strong> por día,
+        con pausas de entre <strong><%= Math.round(config.PAUSA_BASE/1000) %>s</strong> y
+        <strong><%= Math.round(config.PAUSA_MAX/1000) %>s</strong> entre cada mensaje.
+    </div>
+
+    <div class="nav">
+        <a href="/">← Inicio</a>
+        <a href="/monitor">📡 Monitor</a>
+    </div>
+</div>
+
+<script>
+const PRESETS = {
+    conservador: { HORA_INICIO: 9, HORA_FIN: 18, MAX_MENSAJES_HORA: 5, MAX_MENSAJES_DIA: 40, PAUSA_BASE_SEG: 120, PAUSA_MAX_SEG: 180 },
+    moderado:    { HORA_INICIO: 9, HORA_FIN: 20, MAX_MENSAJES_HORA: 12, MAX_MENSAJES_DIA: 80, PAUSA_BASE_SEG: 45, PAUSA_MAX_SEG: 90 },
+    agresivo:    { HORA_INICIO: 8, HORA_FIN: 21, MAX_MENSAJES_HORA: 25, MAX_MENSAJES_DIA: 150, PAUSA_BASE_SEG: 20, PAUSA_MAX_SEG: 40 }
+};
+
+function aplicarPreset(nombre) {
+    var preset = PRESETS[nombre];
+    if (!preset) return;
+    Object.keys(preset).forEach(function(key) {
+        var el = document.getElementById(key);
+        if (el) el.value = preset[key];
+    });
+    document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('activo'); });
+    event.target.classList.add('activo');
+    actualizarResumen();
+}
+
+function actualizarResumen() {
+    var hi = document.getElementById('HORA_INICIO').value;
+    var hf = document.getElementById('HORA_FIN').value;
+    var mh = document.getElementById('MAX_MENSAJES_HORA').value;
+    var md = document.getElementById('MAX_MENSAJES_DIA').value;
+    var pb = document.getElementById('PAUSA_BASE_SEG').value;
+    var pm = document.getElementById('PAUSA_MAX_SEG').value;
+
+    document.getElementById('resumen').innerHTML =
+        '<strong>📋 Resumen actual:</strong><br>' +
+        'Envía mensajes de <strong>' + hi + ':00</strong> a <strong>' + hf + ':00</strong>, ' +
+        'máximo <strong>' + mh + '</strong> mensajes por hora y <strong>' + md + '</strong> por día, ' +
+        'con pausas de entre <strong>' + pb + 's</strong> y <strong>' + pm + 's</strong> entre cada mensaje.';
+}
+
+['HORA_INICIO','HORA_FIN','MAX_MENSAJES_HORA','MAX_MENSAJES_DIA','PAUSA_BASE_SEG','PAUSA_MAX_SEG'].forEach(function(id) {
+    document.getElementById(id).addEventListener('input', actualizarResumen);
+});
+
+document.getElementById('formConfig').addEventListener('submit', function(e) {
+    e.preventDefault();
+    var btn = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    btn.textContent = '⏳ Guardando...';
+
+    var payload = {
+        HORA_INICIO: document.getElementById('HORA_INICIO').value,
+        HORA_FIN: document.getElementById('HORA_FIN').value,
+        MAX_MENSAJES_HORA: document.getElementById('MAX_MENSAJES_HORA').value,
+        MAX_MENSAJES_DIA: document.getElementById('MAX_MENSAJES_DIA').value,
+        PAUSA_BASE: parseInt(document.getElementById('PAUSA_BASE_SEG').value) * 1000,
+        PAUSA_MAX: parseInt(document.getElementById('PAUSA_MAX_SEG').value) * 1000
+    };
+
+    fetch('/config-antibaneo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        var okEl = document.getElementById('alerta-ok');
+        var errEl = document.getElementById('alerta-err');
+        if (data.success) {
+            errEl.style.display = 'none';
+            okEl.textContent = '✅ Configuración guardada correctamente. Se aplica desde ahora.';
+            okEl.style.display = 'block';
+        } else {
+            okEl.style.display = 'none';
+            errEl.textContent = '❌ ' + (data.error || 'Error al guardar');
+            errEl.style.display = 'block';
+        }
+        btn.disabled = false;
+        btn.textContent = '💾 Guardar configuración';
+    })
+    .catch(function(e) {
+        document.getElementById('alerta-err').textContent = '❌ ' + e.message;
+        document.getElementById('alerta-err').style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = '💾 Guardar configuración';
+    });
+});
+</script>
+</body>
+</html>

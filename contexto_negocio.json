@@ -1,0 +1,72 @@
+{
+    "negocio": {
+        "nombre": "Molino de Ideas",
+        "descripcion": "Agencia de marketing digital especializada en diseño web, manejo profesional de redes sociales, posicionamiento en Google y campañas de WhatsApp Marketing para PyMEs y emprendedores. Ayudamos a negocios a tener su web, a ser tendencia en Redes Sociales, a llegar masivamente a sus potenciales clientes a través de WhatsApp y aparecer en Google en las primeras posiciones para captar más clientes.",
+        "tono": "Profesional pero cercano, usar emojis ocasionalmente, tutear al cliente, ser amable y directo",
+        "whatsapp": "+54 9 351 239-9428"
+    },
+    "servicios": [
+        {
+            "nombre": "Diagnóstico de presencia digital",
+            "precio": "SIN CARGO",
+            "descripcion": "Análisis completo de cómo aparece tu negocio en Google, redes sociales y Google Maps. Te entregamos un informe completo en 48 hs con puntos de mejora claros.",
+            "tiempo_entrega": "48 horas hábiles"
+        },
+        {
+            "nombre": "Posicionamiento en Google",
+            "precio": "único pago de $40.000",
+            "descripcion": "Optimizamos tu perfil de Google Business y aplicamos SEO local para que de forma orgánica (gratis), aparezcas en los primeros resultados de la búsqueda o de Maps, cuando tus potenciales clientes googleen lo que ofrecés.",
+            "tiempo_entrega": "5-7 días hábiles"
+        },
+        {
+            "nombre": "Diseño Web Profesional",
+            "precio": "a consultar",
+            "descripcion": "Creamos sitios web modernos, rápidos y adaptados a celulares para que tu negocio tenga presencia online 24/7. Contanos tu proyecto y nosotros nos encargamos de hacerlo realidad en la Web a un precio súper accesible."
+        },
+        {
+            "nombre": "Manejo Profesional de Redes Sociales",
+            "precio": "a consultar",
+            "descripcion": "Gestionamos Instagram, Facebook, TikTok y LinkedIn. Creamos contenido atractivo y alineado a tu marca, respondemos mensajes con IA y hacemos crecer tu comunidad para que vos solo te preocupes por vender. Contanos tu necesidad en torno a las redes y diseñamos el plan que mejor se adapta a tu presupuesto."
+        },
+        {
+            "nombre": "Campañas de WhatsApp Marketing",
+            "precio": "a consultar",
+            "descripcion": "Por medio de bases de datos públicas, recolectamos contactos de tus potenciales clientes y enviamos campañas masivas para captarlos a través de la app de mensajería líder."
+        }
+    ],
+    "faq": [
+        {
+            "pregunta": "¿Cuánto tarda el diagnóstico?",
+            "respuesta": "El diagnóstico sin cargo se entrega en 48 horas hábiles."
+        },
+        {
+            "pregunta": "¿Cómo es la forma de pago?",
+            "respuesta": "El servicio de Posicionamiento en Google tiene un único pago de $40.000. Para los demás servicios, diseñamos un plan a medida y coordinamos la forma de pago según tu proyecto."
+        },
+        {
+            "pregunta": "¿Qué necesitan para empezar?",
+            "respuesta": "Solo necesitamos el nombre de tu negocio y la ciudad donde operás. Con eso ya podemos hacer el diagnóstico gratuito."
+        }
+    ],
+    "objeciones": [
+        {
+            "objecion": "Es muy caro",
+            "respuesta": "Entiendo que el precio pueda parecer alto, pero pensá que con una única inversión de $40.000 estás recuperando clientes que hoy no te encuentran en Google. Además, podemos charlar un plan a medida según tu presupuesto."
+        },
+        {
+            "objecion": "Lo dejo para más adelante",
+            "respuesta": "¡Claro! El diagnóstico sin cargo no vence. ¿Querés que te escriba en un mes para recordártelo?"
+        },
+        {
+            "objecion": "Ya tengo quien me lo hace",
+            "respuesta": "¡Genial! Si en algún momento querés una segunda opinión sin cargo para comparar, acá estoy."
+        }
+    ],
+    "casos_exito": [
+        {
+            "cliente": "SeH Consultora",
+            "rubro": "Seguridad e Higiene Laboral",
+            "resultado": "Aumentaron un 30% las consultas en el primer mes"
+        }
+    ]
+}

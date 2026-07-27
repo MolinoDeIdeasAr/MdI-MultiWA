@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bajas - MdI MultiWA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; flex-wrap: wrap; gap: 10px; }
+        h1 { color: #fb923c; display: flex; align-items: center; gap: 12px; }
+        .badge { background: #fb923c; color: white; padding: 4px 14px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        .info-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 15px; margin-bottom: 20px; font-size: 13px; color: #94a3b8; line-height: 1.6; }
+        .info-box strong { color: #38bdf8; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #334155; color: #f8fafc; padding: 12px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 12px; border-bottom: 1px solid #334155; font-size: 14px; }
+        tr:hover td { background: #0f172a; }
+        .empty { text-align: center; padding: 40px; color: #64748b; }
+        .nav { margin-top: 25px; text-align: center; }
+        a { color: #38bdf8; text-decoration: none; margin: 0 10px; }
+        a:hover { text-decoration: underline; }
+        .export-btn { background: #15803d; color: white; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .export-btn:hover { opacity: 0.85; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <h1>
+            <img src="/logo_MdI.png" style="width:36px; height:36px; border-radius:50%; object-fit:cover;">
+            🚫 Lista de Bajas
+            <span class="badge"><%= bajas.length %></span>
+        </h1>
+        <button class="export-btn" onclick="exportarCSV()">⬇️ Exportar CSV</button>
+    </div>
+
+    <div class="info-box">
+        <strong>📋 Archivo permanente de bajas</strong><br>
+        Estos contactos pidieron ser dados de baja y serán excluidos automáticamente de todas las campañas futuras.<br>
+        El archivo se guarda en <strong>data/bajas.json</strong> — hacé backup de ese archivo para no perder el historial al reinstalar.
+    </div>
+
+    <% if (bajas.length > 0) { %>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nombre</th>
+                    <th>Número</th>
+                    <th>Fecha de baja</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% bajas.forEach((b, i) => { %>
+                    <tr>
+                        <td style="color:#64748b;"><%= i + 1 %></td>
+                        <td><%= b.nombre || 'Desconocido' %></td>
+                        <td style="font-family:monospace; color:#fb923c;"><%= b.numero %></td>
+                        <td style="color:#94a3b8; font-size:12px;"><%= b.fechaLegible || b.fechaBaja %></td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    <% } else { %>
+        <div class="empty">
+            <div style="font-size:40px; margin-bottom:10px;">✅</div>
+            <p>No hay bajas registradas todavía.</p>
+        </div>
+    <% } %>
+
+    <div class="nav">
+        <a href="/">← Inicio</a>
+        <a href="/monitor">📡 Monitor</a>
+        <a href="/conversaciones">💬 Conversaciones</a>
+    </div>
+</div>
+
+<script>
+function exportarCSV() {
+    var bajas = <%- JSON.stringify(bajas) %>;
+    if (bajas.length === 0) { alert('No hay bajas para exportar'); return; }
+
+    var csv = 'Nombre,Numero,Fecha de Baja\n';
+    bajas.forEach(function(b) {
+        csv += '"' + (b.nombre || '') + '","' + (b.numero || '') + '","' + (b.fechaLegible || b.fechaBaja || '') + '"\n';
+    });
+
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'bajas_MdI_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

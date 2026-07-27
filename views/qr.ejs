@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectar WhatsApp - MdI MultiWA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 460px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+        h1 { font-size: 1.6em; margin-bottom: 8px; color: #f8fafc; }
+        .subtitle { color: #94a3b8; margin-bottom: 30px; font-size: 14px; }
+
+        /* QR */
+        #qr-wrapper {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            display: inline-block;
+            margin: 0 auto 25px;
+            min-width: 260px;
+            min-height: 260px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #qr-img { max-width: 260px; max-height: 260px; border-radius: 6px; display: none; }
+
+        /* Estados */
+        #estado-esperando { color: #94a3b8; font-size: 14px; }
+        #estado-esperando .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #334155;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #estado-conectado {
+            display: none;
+            background: #15803d;
+            color: #dcfce7;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        #estado-conectado .check { font-size: 48px; margin-bottom: 8px; }
+        #estado-conectado h2 { font-size: 1.3em; margin-bottom: 4px; }
+        #estado-conectado p { font-size: 14px; opacity: 0.9; }
+
+        /* Pasos */
+        .pasos { text-align: left; margin-bottom: 25px; }
+        .paso {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #334155;
+            font-size: 14px;
+            color: #cbd5e1;
+        }
+        .paso:last-child { border-bottom: none; }
+        .paso-num {
+            background: #38bdf8;
+            color: #0f172a;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        /* Status */
+        #status-msg {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 15px;
+            min-height: 20px;
+        }
+
+        .btn { padding: 10px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: opacity 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-secondary { background: #334155; color: #f8fafc; }
+        .btn:hover { opacity: 0.85; }
+        .btn-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+        /* Barra de progreso de redirección */
+        #redir-bar-wrap { display: none; margin-top: 15px; }
+        #redir-bar-wrap p { font-size: 13px; color: #86efac; margin-bottom: 8px; }
+        #redir-bar-bg { background: #334155; border-radius: 10px; height: 6px; overflow: hidden; }
+        #redir-bar { background: #22c55e; height: 100%; width: 0%; transition: width 0.1s linear; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>📱 Conectar WhatsApp</h1>
+    <p class="subtitle">Escaneá el código QR con tu celular para vincular la cuenta</p>
+
+    <!-- QR o spinner -->
+    <div id="qr-wrapper">
+        <div id="estado-esperando">
+            <div class="spinner"></div>
+            <p>Generando QR...</p>
+        </div>
+        <img id="qr-img" alt="Código QR">
+    </div>
+
+    <!-- Estado conectado (oculto hasta conectar) -->
+    <div id="estado-conectado">
+        <div class="check">✅</div>
+        <h2>¡WhatsApp Conectado!</h2>
+        <p id="numero-conectado">Redirigiendo al panel...</p>
+    </div>
+
+    <!-- Mensaje de estado -->
+    <div id="status-msg">Esperando QR del servidor...</div>
+
+    <!-- Pasos -->
+    <div class="pasos" id="pasos-section">
+        <div class="paso">
+            <div class="paso-num">1</div>
+            <span>Abrí <strong>WhatsApp</strong> en tu celular</span>
+        </div>
+        <div class="paso">
+            <div class="paso-num">2</div>
+            <span>Tocá los <strong>tres puntos</strong> (⋮) → <strong>Dispositivos vinculados</strong></span>
+        </div>
+        <div class="paso">
+            <div class="paso-num">3</div>
+            <span>Tocá <strong>"Vincular un dispositivo"</strong> y escaneá el QR de arriba</span>
+        </div>
+    </div>
+
+    <!-- Barra de redirección -->
+    <div id="redir-bar-wrap">
+        <p>🏠 Redirigiendo al panel principal...</p>
+        <div id="redir-bar-bg"><div id="redir-bar"></div></div>
+    </div>
+
+    <!-- Botones -->
+    <div class="btn-group">
+        <button class="btn btn-secondary" onclick="history.back()">← Volver</button>
+        <button class="btn btn-primary" onclick="location.reload()">🔄 Recargar QR</button>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const qrImg        = document.getElementById('qr-img');
+    const estadoEsp    = document.getElementById('estado-esperando');
+    const estadoCon    = document.getElementById('estado-conectado');
+    const statusMsg    = document.getElementById('status-msg');
+    const pasosSec     = document.getElementById('pasos-section');
+    const redirWrap    = document.getElementById('redir-bar-wrap');
+    const redirBar     = document.getElementById('redir-bar');
+    const numeroCon    = document.getElementById('numero-conectado');
+    const qrWrapper    = document.getElementById('qr-wrapper');
+
+    const socket = io();
+    const userId = '<%= userId %>';
+
+    // ── Unirse al socket ──
+    socket.on('connect', () => {
+        statusMsg.textContent = '🔌 Conectado al servidor, esperando QR...';
+        socket.emit('join', userId);
+    });
+
+    socket.on('disconnect', () => {
+        statusMsg.textContent = '❌ Sin conexión al servidor. Recargá la página.';
+    });
+
+    // ── Recibir QR ──
+    socket.on('qr', (data) => {
+        if (!data || !data.qr) return;
+        console.log('📷 QR recibido');
+
+        qrImg.src = data.qr;
+        qrImg.style.display = 'block';
+        estadoEsp.style.display = 'none';
+        qrWrapper.style.minHeight = 'auto';
+        statusMsg.textContent = '📷 Escaneá el QR con WhatsApp en tu celular';
+    });
+
+    socket.on('qr_waiting', (data) => {
+        statusMsg.textContent = data.message || 'Generando QR...';
+    });
+
+    // ── WhatsApp listo → redirigir ──
+    socket.on('whatsapp_ready', (data) => {
+        console.log('✅ WhatsApp listo:', data);
+
+        // Ocultar QR, mostrar éxito
+        qrWrapper.style.display = 'none';
+        pasosSec.style.display = 'none';
+        estadoCon.style.display = 'block';
+
+        if (data.numero) {
+            numeroCon.textContent = `Número: +${data.numero} — Redirigiendo...`;
+        } else {
+            numeroCon.textContent = 'Conectado — Redirigiendo al panel...';
+        }
+
+        statusMsg.textContent = '';
+
+        // Barra de progreso de redirección (2 segundos)
+        redirWrap.style.display = 'block';
+        let pct = 0;
+        const intervalo = setInterval(() => {
+            pct += 2;
+            redirBar.style.width = pct + '%';
+            if (pct >= 100) {
+                clearInterval(intervalo);
+                window.location.href = '/';
+            }
+        }, 40); // 40ms × 50 pasos = 2 segundos
+    });
+
+    // ── Timeout: si en 60s no hay QR, sugerir recargar ──
+    setTimeout(() => {
+        if (qrImg.style.display === 'none') {
+            statusMsg.textContent = '⚠️ El QR está tardando. Probá recargar la página.';
+            statusMsg.style.color = '#fbbf24';
+        }
+    }, 60000);
+</script>
+</body>
+</html>

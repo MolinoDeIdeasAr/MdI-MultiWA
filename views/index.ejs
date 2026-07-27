@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <link rel="icon" type="image/png" href="/logo_MdI.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MdI MultiWA</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #1a1a2e; margin-bottom: 5px; }
+        .subtitle { color: #666; margin-bottom: 25px; }
+        .status-box { padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .status-online  { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status-offline { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status-warning { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+        .card { background: #f8f9fa; border-radius: 8px; padding: 20px; margin-bottom: 20px; border: 1px solid #dee2e6; }
+        .card h3 { margin-bottom: 15px; color: #1a1a2e; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger  { background: #dc3545; color: white; }
+        .btn-warning { background: #f59e0b; color: #1a1a2e; }
+        .instancia-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: white; border-radius: 6px; margin-bottom: 8px; border: 1px solid #dee2e6; }
+        .instancia-activa { border-left: 4px solid #28a745 !important; background: #f0fff4 !important; }
+        .instancia-numero { font-weight: bold; color: #1a1a2e; }
+        .instancia-estado { font-size: 13px; padding: 3px 10px; border-radius: 20px; }
+        .estado-conectado    { background: #d4edda; color: #155724; }
+        .estado-desconectado { background: #f8d7da; color: #721c24; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; resize: vertical; min-height: 80px; margin-bottom: 10px; font-family: inherit; }
+        input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; }
+        .hidden { display: none; }
+        .mt-10 { margin-top: 10px; }
+        .flex { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .no-instancias { text-align: center; padding: 30px 20px; color: #6c757d; }
+        .badge-activa { background: #28a745; color: white; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; }
+        .badge-id { background: #e9ecef; color: #6c757d; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-family: monospace; }
+        .alerta-carga { padding: 10px 15px; border-radius: 6px; margin-bottom: 10px; font-size: 14px; }
+        .alerta-ok  { background: #d4edda; color: #155724; }
+        .alerta-err { background: #f8d7da; color: #721c24; }
+        .preview-img { max-width: 150px; max-height: 100px; border-radius: 6px; margin: 8px 0; display: block; }
+        .drop-area { border: 2px dashed #ced4da; padding: 20px; text-align: center; border-radius: 6px; cursor: pointer; transition: border-color 0.2s; font-size: 14px; color: #666; }
+        .drop-area:hover { border-color: #007bff; }
+        .file-info { display: none; margin: 8px 0; padding: 8px 12px; background: #e9ecef; border-radius: 6px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="flex-between">
+        <div class="flex" style="align-items:center; gap:12px;">
+            <img src="/logo_MdI.png" style="width:48px; height:48px; border-radius:50%; object-fit:cover;">
+            <div>
+                <h1>MdI MultiWA</h1>
+                <p class="subtitle">Gestión de Campañas WhatsApp</p>
+            </div>
+        </div>
+        <a href="/logout" class="btn btn-danger btn-sm">Cerrar sesión</a>
+    </div>
+
+    <!-- ESTADO -->
+    <% if (estado && estado.listo) { %>
+        <div class="status-box status-online">
+            ✅ WhatsApp Conectado<% if (estado.numeroWhatsApp) { %> — <%= estado.numeroWhatsApp %><% } %>
+        </div>
+    <% } else if (instancias && instancias.length > 0) { %>
+        <div class="status-box status-offline">
+            ❌ WhatsApp Desconectado — <a href="/qr" style="color:#721c24;">Reconectar →</a>
+        </div>
+    <% } else { %>
+        <div class="status-box status-warning">⚠️ No hay cuentas de WhatsApp configuradas</div>
+    <% } %>
+
+    <!-- INSTANCIAS: solo mostrar conectadas + la activa -->
+    <div class="card">
+        <div class="flex-between">
+            <h3>📱 Mis Cuentas</h3>
+            <form action="/nueva-instancia" method="POST" style="display:inline;">
+                <button type="submit" class="btn btn-primary">➕ Agregar WhatsApp</button>
+            </form>
+        </div>
+
+        <%
+            // Mostrar: conectadas + activa + las que están conectando (para poder limpiarlas)
+            const instanciasMostrar = (instancias || []).filter(i => i.listo || i.id === activeId || !i.listo);
+        %>
+
+        <% if (instanciasMostrar.length > 0) { %>
+            <% for (const inst of instanciasMostrar) {
+                const esActiva = inst.id === activeId;
+            %>
+                <div class="instancia-item <%= esActiva ? 'instancia-activa' : '' %>">
+                    <div class="flex">
+                        <span class="instancia-numero">
+                            <%= inst.numero ? inst.numero : 'Conectando...' %>
+                        </span>
+                        <span class="instancia-estado <%= inst.listo ? 'estado-conectado' : 'estado-desconectado' %>">
+                            <%= inst.listo ? '✅ Conectado' : '⏳ Conectando' %>
+                        </span>
+                        <% if (esActiva) { %><span class="badge-activa">ACTIVA</span><% } %>
+                        <span class="badge-id"><%= inst.id.slice(-6) %></span>
+                    </div>
+                    <div class="flex">
+                        <% if (!esActiva && inst.listo) { %>
+                            <form action="/seleccionar-instancia" method="POST" style="display:inline;">
+                                <input type="hidden" name="instanceId" value="<%= inst.id %>">
+                                <button type="submit" class="btn btn-primary btn-sm">Usar esta</button>
+                            </form>
+                        <% } %>
+                        <% if (!inst.listo) { %>
+                            <button type="button" onclick="forzarDesconexion('<%= inst.id %>')"
+                                class="btn btn-warning btn-sm" title="Limpiar sesión trabada">
+                                🔧 Forzar limpieza
+                            </button>
+                        <% } %>
+                        <form action="/desconectar-instancia" method="POST" style="display:inline;"
+                              onsubmit="return confirm('¿Eliminar esta instancia?')">
+                            <input type="hidden" name="instanceId" value="<%= inst.id %>">
+                            <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                        </form>
+                    </div>
+                </div>
+            <% } %>
+
+            <%
+                // Mostrar cuántas desconectadas hay pero ocultas
+                const desconectadasOcultas = (instancias || []).filter(i => !i.listo && i.id !== activeId);
+            %>
+            <% if (desconectadasOcultas.length > 0) { %>
+                <div style="margin-top:10px; padding:8px 12px; background:#fff3cd; border-radius:6px; font-size:13px; color:#856404;">
+                    ⚠️ <%= desconectadasOcultas.length %> cuenta(s) desconectada(s) oculta(s).
+                    <% for (const d of desconectadasOcultas) { %>
+                        <form action="/desconectar-instancia" method="POST" style="display:inline;">
+                            <input type="hidden" name="instanceId" value="<%= d.id %>">
+                            <button type="submit" class="btn btn-danger btn-sm" style="margin-left:8px;">
+                                🗑 Borrar (<%= d.id.slice(-6) %>)
+                            </button>
+                        </form>
+                    <% } %>
+                </div>
+            <% } %>
+
+        <% } else { %>
+            <div class="no-instancias">
+                <div style="font-size:40px; margin-bottom:8px;">📭</div>
+                <p>No tenés cuentas configuradas</p>
+                <form action="/nueva-instancia" method="POST" style="display:inline;">
+                    <button type="submit" class="btn btn-primary mt-10">➕ Agregar tu primera cuenta</button>
+                </form>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- CARGAR CONTACTOS -->
+    <div class="card">
+        <h3>📂 Cargar Contactos</h3>
+
+        <div id="msg-carga" style="display:none;" class="alerta-carga"></div>
+
+        <!-- DRIVE -->
+        <div style="margin-bottom:15px;">
+            <label style="font-weight:bold; display:block; margin-bottom:6px;">🔗 Google Sheets (enlace público)</label>
+            <input type="text" id="url-drive" placeholder="https://docs.google.com/spreadsheets/d/...">
+            <div style="margin-top:8px;">
+                <button type="button" id="btn-drive" class="btn btn-primary" onclick="cargarDesdeDrive()">
+                    🔗 Cargar desde Drive
+                </button>
+            </div>
+        </div>
+
+        <hr style="margin:15px 0; border-color:#dee2e6;">
+
+        <!-- EXCEL -->
+        <div>
+            <label style="font-weight:bold; display:block; margin-bottom:6px;">📁 Subir archivo Excel</label>
+            <div class="drop-area" id="drop-area">
+                📁 Arrastrá o hacé clic para seleccionar (.xlsx / .xls)
+            </div>
+            <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
+            <div class="file-info" id="file-info"></div>
+            <div style="margin-top:8px;">
+                <button type="button" id="btn-excel" class="btn btn-success" onclick="cargarArchivo()" disabled>
+                    📤 Cargar Archivo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FORMULARIO DE ENVÍO -->
+    <% if (estado && estado.contactosCargados && estado.contactosCargados.length > 0) { %>
+        <div class="card">
+            <div class="flex-between" style="margin-bottom:15px;">
+                <h3>📨 Enviar Mensaje</h3>
+                <span style="background:#d4edda; color:#155724; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:bold;">
+                    <%= estado.contactosCargados.length %> contactos
+                    <% if (estado.rubro) { %> · <%= estado.rubro %><% } %>
+                </span>
+            </div>
+
+            <form id="formEnvio">
+                <p style="font-size:13px; color:#666; margin-bottom:10px;">
+                    Usá <code>{{NOMBRE}}</code> para personalizar y <code>{variante1|variante2}</code> para spintax.
+                </p>
+
+                <label style="font-weight:bold;">Mensaje 1 (requerido)</label>
+                <textarea name="mensaje1" id="mensaje1" placeholder="Hola {{NOMBRE}}..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[0]) ? estado.mensajesGuardados[0] : '' %></textarea>
+
+                <label style="font-weight:bold;">Mensaje 2 (variante opcional)</label>
+                <textarea name="mensaje2" id="mensaje2" placeholder="Otra variante..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[1]) ? estado.mensajesGuardados[1] : '' %></textarea>
+
+                <label style="font-weight:bold;">Mensaje 3 (variante opcional)</label>
+                <textarea name="mensaje3" id="mensaje3" placeholder="Otra variante..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[2]) ? estado.mensajesGuardados[2] : '' %></textarea>
+
+                <!-- IMAGEN -->
+                <div style="margin:15px 0;">
+                    <label style="font-weight:bold;">🖼️ Imagen adjunta (opcional)</label>
+                    <% if (estado.imagenGuardada) { %>
+                        <div style="margin:8px 0; display:flex; align-items:center; gap:12px; padding:10px; background:#e9ecef; border-radius:8px;">
+                            <img src="/uploads/<%= estado.imagenGuardada %>"
+                                 style="width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ced4da;"
+                                 onerror="this.style.display='none'">
+                            <div>
+                                <div style="font-size:13px; color:#333; margin-bottom:6px;">📎 <%= estado.imagenGuardada %></div>
+                                <button type="button" onclick="borrarImagen()" class="btn btn-danger btn-sm">✕ Quitar imagen</button>
+                            </div>
+                        </div>
+                    <% } %>
+                    <input type="file" name="imagen" accept="image/*" id="input-imagen" style="margin-top:8px; display:block;">
+                    <img id="preview-img" style="display:none; width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ced4da; margin-top:8px;">
+                </div>
+
+                <div id="envio-msg" style="display:none; padding:10px; border-radius:6px; margin-bottom:10px; text-align:center;"></div>
+                <button type="submit" id="btn-enviar" class="btn btn-success" style="width:100%; padding:15px; font-size:16px;">
+                    🚀 INICIAR CAMPAÑA
+                </button>
+            </form>
+        </div>
+    <% } else if (estado && estado.listo) { %>
+        <div class="card" style="background:#fff3cd; border-color:#ffc107;">
+            <p>📂 No hay contactos cargados. Usá la sección de arriba para cargarlos.</p>
+        </div>
+    <% } %>
+
+    <div style="text-align:center; margin-top:20px; padding:15px; border-top:1px solid #dee2e6;">
+        <a href="/monitor" style="margin:0 10px; color:#007bff;">📡 Monitor</a>
+        <a href="/conversaciones" style="margin:0 10px; color:#007bff;">💬 Conversaciones</a>
+        <a href="/bajas" style="margin:0 10px; color:#f97316;">🚫 Bajas</a>
+        <a href="/config-antibaneo" style="margin:0 10px; color:#38bdf8;">⚙️ Anti-Baneo</a>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ── Forzar desconexión de instancia trabada ──
+function forzarDesconexion(instanceId) {
+    if (!confirm('¿Forzar la limpieza de esta sesión trabada? Se borrará la sesión y tendrás que escanear el QR de nuevo.')) return;
+    var btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '⏳...';
+    fetch('/forzar-desconexion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: instanceId })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (data.success) {
+            mostrarMsg('✅ Sesión limpiada. Recargando...', 'ok');
+            setTimeout(function() { location.reload(); }, 1500);
+        } else {
+            mostrarMsg('❌ Error: ' + (data.error || 'No se pudo limpiar'), 'err');
+            btn.disabled = false;
+            btn.textContent = '🔧 Forzar';
+        }
+    })
+    .catch(function(e) {
+        mostrarMsg('❌ ' + e.message, 'err');
+        btn.disabled = false;
+        btn.textContent = '🔧 Forzar';
+    });
+}
+
+// ── Socket para actualización en tiempo real ──
+var socket = io();
+var usuarioEscribiendo = false;
+
+// Detectar si el usuario tiene foco en algún input/textarea
+document.addEventListener('focusin', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        usuarioEscribiendo = true;
+    }
+});
+document.addEventListener('focusout', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        // Pequeño delay para no cortar un paste que trigger focusout momentáneamente
+        setTimeout(function() { usuarioEscribiendo = false; }, 500);
+    }
+});
+
+socket.on('connect', function() {
+    socket.emit('join', '<%= userId %>');
+});
+
+// Solo recargar cuando WhatsApp conecta Y el usuario no está escribiendo
+socket.on('whatsapp_ready', function() {
+    if (!usuarioEscribiendo) {
+        setTimeout(function() { location.reload(); }, 1000);
+    }
+});
+
+// instances_update: NO recargar automáticamente — solo cuando conecta WhatsApp (evento de arriba)
+socket.on('instances_update', function(data) {
+    // Sin reload automático — evita que saque el foco del input
+});
+
+// ── Utilidades de mensajes ──
+function mostrarMsg(texto, tipo) {
+    var el = document.getElementById('msg-carga');
+    el.className = 'alerta-carga ' + (tipo === 'ok' ? 'alerta-ok' : 'alerta-err');
+    el.textContent = texto;
+    el.style.display = 'block';
+    if (tipo === 'ok') setTimeout(function() { el.style.display = 'none'; }, 4000);
+}
+
+// ── Cargar desde Drive ──
+function cargarDesdeDrive() {
+    var urlInput = document.getElementById('url-drive');
+    var btn = document.getElementById('btn-drive');
+    if (!urlInput) { alert('Error: no se encontró el campo URL'); return; }
+    var url = urlInput.value.trim();
+    if (!url) { mostrarMsg('Pegá la URL de Google Sheets primero', 'err'); return; }
+    if (!url.includes('docs.google.com')) { mostrarMsg('La URL no parece ser de Google Sheets', 'err'); return; }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Cargando...';
+
+        var payload = {
+
+        urlDrive: url
+
+    };
+
+    fetch(
+
+        '/api/carga/cargar',
+
+        {
+
+            method: 'POST',
+
+            headers: {
+
+                'Content-Type': 'application/json'
+
+            },
+
+            body: JSON.stringify(
+
+                payload
+
+            )
+
+        }
+
+    )
+
+    .then(function(res) {
+
+        return res.json().then(function(d) {
+
+            return {
+
+                ok: res.ok,
+
+                data: d
+
+            };
+
+        });
+
+    })
+
+    .then(function(r) {
+
+        if (!r.ok) {
+
+            throw new Error(
+
+                r.data.error ||
+
+                'Error desconocido'
+
+            );
+
+        }
+
+        var msg =
+
+            '✅ ' +
+
+            r.data.total +
+
+            ' contactos cargados.';
+
+        if (
+
+            r.data.fijos > 0
+
+        ) {
+
+            msg +=
+
+                ' ⚠️ ' +
+
+                r.data.fijos +
+
+                ' fijo(s) descartado(s).';
+
+        }
+
+        msg +=
+
+            ' Recargando...';
+
+        mostrarMsg(
+
+            msg,
+
+            'ok'
+
+        );
+
+        setTimeout(
+
+            function() {
+
+                location.reload();
+
+            },
+
+            1500
+
+        );
+
+    })
+
+    .catch(function(e) {
+
+        mostrarMsg(
+
+            '❌ ' + e.message,
+
+            'err'
+
+        );
+
+        btn.disabled = false;
+
+        btn.textContent =
+
+            '🔗 Cargar desde Drive';
+
+    });
+
+
+}
+// ── Drag & Drop Excel ──
+var archivoSeleccionado = null;
+var dropArea = document.getElementById('drop-area');
+var fileInput = document.getElementById('file-input');
+
+if (dropArea) {
+    dropArea.addEventListener('click', function() { fileInput.click(); });
+    dropArea.addEventListener('dragover', function(e) { e.preventDefault(); dropArea.style.borderColor = '#007bff'; });
+    dropArea.addEventListener('dragleave', function() { dropArea.style.borderColor = '#ced4da'; });
+    dropArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropArea.style.borderColor = '#ced4da';
+        if (e.dataTransfer.files.length) manejarArchivo(e.dataTransfer.files[0]);
+    });
+}
+if (fileInput) {
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length) manejarArchivo(e.target.files[0]);
+    });
+}
+
+function manejarArchivo(file) {
+    if (!file.name.match(/\.xlsx?$/i)) { mostrarMsg('Solo se aceptan .xlsx o .xls', 'err'); return; }
+    archivoSeleccionado = file;
+    var info = document.getElementById('file-info');
+    info.textContent = '✅ ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+    info.style.display = 'block';
+    document.getElementById('btn-excel').disabled = false;
+}
+
+function cargarArchivo() {
+    if (!archivoSeleccionado) { mostrarMsg('Seleccioná un archivo primero', 'err'); return; }
+    var btn = document.getElementById('btn-excel');
+    btn.disabled = true;
+    btn.textContent = '⏳ Cargando...';
+
+    var fd = new FormData();
+    fd.append('excel', archivoSeleccionado);
+
+    fetch('/cargar', { method: 'POST', body: fd })
+        .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
+        .then(function(r) {
+            if (!r.ok) throw new Error(r.data.error || 'Error desconocido');
+            var msg = '✅ ' + r.data.total + ' contactos cargados.'; if (r.data.fijos > 0) msg += ' ⚠️ ' + r.data.fijos + ' fijo(s) descartado(s).'; msg += ' Recargando...'; mostrarMsg(msg, 'ok');
+            setTimeout(function() { location.reload(); }, 1500);
+        })
+        .catch(function(e) {
+            mostrarMsg('❌ ' + e.message, 'err');
+            btn.disabled = false;
+            btn.textContent = '📤 Cargar Archivo';
+        });
+}
+
+// ── Preview imagen ──
+var inputImagen = document.getElementById('input-imagen');
+if (inputImagen) {
+    inputImagen.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+            var img = document.getElementById('preview-img');
+            img.src = ev.target.result;
+            img.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function borrarImagen() {
+    if (!confirm('¿Quitar la imagen guardada?')) return;
+    fetch('/borrar-imagen', { method: 'POST' }).then(function() { location.reload(); });
+}
+
+// ── Envío de campaña ──
+var formEnvio = document.getElementById('formEnvio');
+if (formEnvio) {
+    formEnvio.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var btn = document.getElementById('btn-enviar');
+        var msgEl = document.getElementById('envio-msg');
+        btn.disabled = true;
+        btn.textContent = '⏳ Iniciando campaña...';
+        msgEl.style.display = 'none';
+
+        fetch(
+
+    '/api/carga/cargar',
+
+    {
+
+        method: 'POST',
+
+        headers: {
+
+            'Content-Type': 'application/json'
+
+        },
+
+        body: JSON.stringify({
+
+            urlDrive: url
+
+        })
+
+    }
+
+)
+            .catch(function(e) {
+                msgEl.style.cssText = 'display:block; background:#f8d7da; color:#721c24; padding:10px; border-radius:6px; margin-bottom:10px; text-align:center;';
+                msgEl.textContent = '❌ ' + e.message;
+                btn.disabled = false;
+                btn.textContent = '🚀 INICIAR CAMPAÑA';
+            });
+    });
+}
+
+// ── Autoguardado de mensajes ──
+function autoguardar() {
+    var m1 = document.getElementById('mensaje1');
+    var m2 = document.getElementById('mensaje2');
+    var m3 = document.getElementById('mensaje3');
+    if (!m1) return;
+    fetch('/guardar-mensajes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            mensaje1: m1 ? m1.value : '',
+            mensaje2: m2 ? m2.value : '',
+            mensaje3: m3 ? m3.value : ''
+        })
+    }).catch(function() {});
+}
+
+var timerGuardado;
+['mensaje1','mensaje2','mensaje3'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() {
+        clearTimeout(timerGuardado);
+        timerGuardado = setTimeout(autoguardar, 1000);
+    });
+});
+</script>
+</body>
+</html>
