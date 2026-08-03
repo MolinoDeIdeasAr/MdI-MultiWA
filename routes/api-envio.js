@@ -1,34 +1,43 @@
 'use strict';
 
-//==============================================================
-// MdI MultiWA
-// routes/api-envio.js
-// v4.0
-//
-// La ruta solamente:
-//
-// • inicia campañas
-// • las detiene
-// • consulta estado
-//
-// Toda la lógica de envío quedó en:
-//
-// services/campaign-runner.js
-// services/campaign-scheduler.js
-//==============================================================
-
-const express = require('express');
-
-const router = express.Router();
+/**
+ * =============================================================
+ * MdI MultiWA
+ * routes/api-envio.js
+ *
+ * Versión : v5.0.0
+ *
+ * API de inicio de campañas.
+ *
+ * Esta ruta:
+ *
+ * ✔ valida la instancia
+ * ✔ prepara el estado
+ * ✔ inicia el scheduler
+ * ✔ responde al frontend
+ *
+ * NO envía mensajes.
+ * =============================================================
+ */
 
 //==============================================================
 // DEPENDENCIAS
 //==============================================================
 
+const express =
+
+    require('express');
+
+const router =
+
+    express.Router();
+
 const sessionManager =
+
     require('../services/session-manager');
 
 const scheduler =
+
     require('../services/campaign-scheduler');
 
 const {
@@ -37,58 +46,61 @@ const {
 
     guardarEstadoSeguro
 
-} = require('../state/estado');
+} = require(
+
+    '../state/estado'
+
+);
 
 const {
+
+    reiniciarScheduler,
 
     getScheduler
 
-} = require('../state/scheduler-state');
+} = require(
 
-const {
+    '../state/scheduler-state'
 
-    guardarMensajes
-
-} = require('../state/estado');
-
-const antiBan =
-    require('../config/anti-baneo');
-
-const {
-
-    esBaja
-
-} = require('../services/bajas');
+);
 
 //==============================================================
-// POST /ENVIAR
+// POST /api/enviar
 //==============================================================
 
 router.post(
 
     '/enviar',
 
-    async (req, res) => {
+    async (
 
-        try {
+        req,
+
+        res
+
+    ) => {
+
+        try{
 
             //--------------------------------------------------
-            // DATOS
+            // INSTANCE ID
             //--------------------------------------------------
 
-            const {
+            const instanceId =
 
-                instanceId
+                req.body.instanceId;
 
-            } = req.body;
+            if(
 
-            if (!instanceId) {
+                !instanceId
+
+            ){
 
                 return res.status(400).json({
 
-                    ok: false,
+                    ok:false,
 
-                    error: 'InstanceId inexistente'
+                    error:'InstanceId inexistente'
 
                 });
 
@@ -106,13 +118,17 @@ router.post(
 
                 );
 
-            if (!client) {
+            if(
+
+                !client
+
+            ){
 
                 return res.status(400).json({
 
-                    ok: false,
+                    ok:false,
 
-                    error: 'WhatsApp desconectado'
+                    error:'Cliente no conectado'
 
                 });
 
@@ -130,89 +146,79 @@ router.post(
 
                 );
 
-            if (!estado) {
+            if(
+
+                !estado
+
+            ){
 
                 return res.status(400).json({
 
-                    ok: false,
+                    ok:false,
 
-                    error: 'Estado inexistente'
+                    error:'Estado inexistente'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // MENSAJES
+            // VALIDAR CONTACTOS
+            //--------------------------------------------------
+
+            if(
+
+                !estado.contactosCargados ||
+
+                estado.contactosCargados.length===0
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'No hay contactos cargados'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // VALIDAR MENSAJES
             //--------------------------------------------------
 
             const mensajes =
 
                 (estado.mensajesGuardados || [])
 
-                    .filter(Boolean);
+                .filter(Boolean);
 
-            if (
+            if(
 
-                mensajes.length === 0
+                mensajes.length===0
 
-            ) {
+            ){
 
                 return res.status(400).json({
 
-                    ok: false,
+                    ok:false,
 
-                    error: 'No hay mensajes cargados'
+                    error:'No hay mensajes cargados'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // CONTACTOS
+            // REINICIAR CAMPAÑA
             //--------------------------------------------------
 
-            const contactos =
-
-                estado.contactosCargados || [];
-
-            if (
-
-                contactos.length === 0
-
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    error: 'No hay contactos'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // FILTRAR BAJAS
-            //--------------------------------------------------
-
-            estado.contactosCargados =
-
-                contactos.filter(
-
-                    c => !esBaja(
-
-                        c.numero
-
-                    )
-
-                );
+            estado.actual = 0;
 
             estado.total =
 
                 estado.contactosCargados.length;
-
-            estado.actual = 0;
 
             estado.enviadosOk = 0;
 
@@ -224,6 +230,10 @@ router.post(
 
             estado.campanaFinalizada = false;
 
+            //--------------------------------------------------
+            // GUARDAR ESTADO
+            //--------------------------------------------------
+
             guardarEstadoSeguro(
 
                 instanceId
@@ -231,14 +241,118 @@ router.post(
             );
 
             //--------------------------------------------------
-            // INICIAR SCHEDULER
+            // REINICIAR SCHEDULER
             //--------------------------------------------------
 
-            await scheduler.iniciar(
+            reiniciarScheduler(
 
                 instanceId
 
             );
+
+            const sch =
+
+                getScheduler(
+
+                    instanceId
+
+                );
+
+            console.log('');
+
+            console.log(
+
+                '=============================='
+
+            );
+
+            console.log(
+
+                '[ENVIAR]'
+
+            );
+
+            console.log(
+
+                'instanceId:',
+
+                instanceId
+
+            );
+
+            console.log(
+
+                'cliente:',
+
+                !!client
+
+            );
+
+            console.log(
+
+                'estado:',
+
+                !!estado
+
+            );
+
+            console.log(
+
+                'mensajes:',
+
+                mensajes.length
+
+            );
+
+            console.log(
+
+                'contactos:',
+
+                estado.total
+
+            );
+
+            console.log(
+
+                'scheduler:',
+
+                sch.status
+
+            );
+
+            console.log(
+
+                '=============================='
+
+            );
+
+            //--------------------------------------------------
+            // INICIAR SCHEDULER
+            //--------------------------------------------------
+
+            const iniciado =
+
+                await scheduler.iniciar(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !iniciado
+
+            ){
+
+                return res.status(409).json({
+
+                    ok:false,
+
+                    error:'La campaña ya está en ejecución'
+
+                });
+
+            }
 
             //--------------------------------------------------
             // RESPUESTA
@@ -246,45 +360,55 @@ router.post(
 
             return res.json({
 
-                ok: true,
+                ok:true,
 
-                total: estado.total,
+                mensaje:'Campaña iniciada correctamente.',
 
-                mensajes: mensajes.length,
+                instanceId,
 
-                antiban: {
+                monitor:
 
-                    horario:
-
-                        `${antiBan.CONFIG.HORA_INICIO}:00 - ${antiBan.CONFIG.HORA_FIN}:00`,
-
-                    limiteHora:
-
-                        antiBan.CONFIG.MAX_MENSAJES_HORA,
-
-                    limiteDia:
-
-                        antiBan.CONFIG.MAX_MENSAJES_DIA
-
-                }
+                        `/monitor?instanceId=${instanceId}`
 
             });
 
         }
 
-        catch (err) {
+        //------------------------------------------------------
+        // ERROR GENERAL
+        //------------------------------------------------------
+
+        catch(err){
+
+            console.error('');
 
             console.error(
 
-                err
+                '====================================='
 
             );
 
+            console.error(
+
+                '❌ ERROR API ENVÍO'
+
+            );
+
+            console.error(
+
+                '====================================='
+
+            );
+
+            console.error(err);
+
+            console.error('');
+
             return res.status(500).json({
 
-                ok: false,
+                ok:false,
 
-                error: err.message
+                error:err.message
 
             });
 
@@ -295,16 +419,22 @@ router.post(
 );
 
 //==============================================================
-// POST /DETENER
+// POST /api/pausar
 //==============================================================
 
 router.post(
 
-    '/detener',
+    '/pausar',
 
-    (req, res) => {
+    async(
 
-        try {
+        req,
+
+        res
+
+    )=>{
+
+        try{
 
             const {
 
@@ -312,17 +442,67 @@ router.post(
 
             } = req.body;
 
-            if (!instanceId) {
+            if(
+
+                !instanceId
+
+            ){
 
                 return res.status(400).json({
 
-                    ok: false,
+                    ok:false,
 
-                    error: 'InstanceId inexistente'
+                    error:'InstanceId inexistente'
 
                 });
 
             }
+
+            //--------------------------------------------------
+            // ESTADO
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(404).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // PAUSAR CAMPAÑA
+            //--------------------------------------------------
+
+            estado.enviando = false;
+
+            estado.pausado = true;
+
+            guardarEstadoSeguro(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // DETENER SCHEDULER
+            //--------------------------------------------------
 
             scheduler.detener(
 
@@ -330,51 +510,37 @@ router.post(
 
             );
 
-            const estado =
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            if (estado) {
-
-                estado.enviando = false;
-
-                estado.pausado = true;
-
-                guardarEstadoSeguro(
-
-                    instanceId
-
-                );
-
-            }
-
             console.log(
 
-                `⏹ Campaña detenida: ${instanceId}`
+                `⏸ Campaña pausada (${instanceId})`
 
             );
 
             return res.json({
 
-                ok: true
+                ok:true,
+
+                mensaje:'Campaña pausada correctamente.'
 
             });
 
         }
 
-        catch (err) {
+        catch(err){
+
+            console.error(
+
+                '❌ Error pausando campaña'
+
+            );
 
             console.error(err);
 
             return res.status(500).json({
 
-                ok: false,
+                ok:false,
 
-                error: err.message
+                error:err.message
 
             });
 
@@ -384,22 +550,475 @@ router.post(
 
 );
 
+//==============================================================
+// POST /api/pausar
+//==============================================================
+
+router.post(
+
+    '/pausar',
+
+    async(
+
+        req,
+
+        res
+
+    )=>{
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'InstanceId inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // ESTADO
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(404).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // PAUSAR CAMPAÑA
+            //--------------------------------------------------
+
+            estado.enviando = false;
+
+            estado.pausado = true;
+
+            guardarEstadoSeguro(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // DETENER SCHEDULER
+            //--------------------------------------------------
+
+            scheduler.detener(
+
+                instanceId
+
+            );
+
+            console.log(
+
+                `⏸ Campaña pausada (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                mensaje:'Campaña pausada correctamente.'
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(
+
+                '❌ Error pausando campaña'
+
+            );
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
 
 //==============================================================
-// GET /ESTADO
+// POST /api/continuar
+//==============================================================
+
+router.post(
+
+    '/continuar',
+
+    async(
+
+        req,
+
+        res
+
+    )=>{
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // VALIDAR
+            //--------------------------------------------------
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'InstanceId inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // ESTADO
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(404).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // YA FINALIZÓ
+            //--------------------------------------------------
+
+            if(
+
+                estado.campanaFinalizada
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'La campaña ya finalizó'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // REANUDAR
+            //--------------------------------------------------
+
+            estado.enviando = true;
+
+            estado.pausado = false;
+
+            guardarEstadoSeguro(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // REINICIAR SCHEDULER
+            //--------------------------------------------------
+
+            reiniciarScheduler(
+
+                instanceId
+
+            );
+
+            const iniciado =
+
+                await scheduler.iniciar(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !iniciado
+
+            ){
+
+                return res.status(409).json({
+
+                    ok:false,
+
+                    error:'No fue posible reiniciar el scheduler'
+
+                });
+
+            }
+
+            console.log(
+
+                `▶ Campaña reanudada (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                mensaje:'Campaña reanudada correctamente.'
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(
+
+                '❌ Error reanudando campaña'
+
+            );
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// POST /api/detener
+//==============================================================
+
+router.post(
+
+    '/detener',
+
+    async(
+
+        req,
+
+        res
+
+    )=>{
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // VALIDAR
+            //--------------------------------------------------
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'InstanceId inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // ESTADO
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(404).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // DETENER CAMPAÑA
+            //--------------------------------------------------
+
+            estado.enviando = false;
+
+            estado.pausado = false;
+
+            estado.campanaFinalizada = true;
+
+            guardarEstadoSeguro(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // DETENER SCHEDULER
+            //--------------------------------------------------
+
+            scheduler.detener(
+
+                instanceId
+
+            );
+
+            console.log(
+
+                `🛑 Campaña detenida (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                mensaje:'Campaña detenida correctamente.'
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(
+
+                '❌ Error deteniendo campaña'
+
+            );
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// GET ESTADO
 //==============================================================
 
 router.get(
 
     '/estado/:instanceId',
 
-    (req, res) => {
+    (
 
-        try {
+        req,
 
-            const
+        res
 
-                instanceId =
+    )=>{
+
+        try{
+
+            const instanceId =
 
                 req.params.instanceId;
 
@@ -411,379 +1030,41 @@ router.get(
 
                 );
 
-            const sched =
-
-                getScheduler(
-
-                    instanceId
-
-                );
-
-            if (!estado) {
-
-                return res.json({
-
-                    ok:false
-
-                });
-
-            }
-
-            return res.json({
-
-                ok:true,
-
-                enviando:
-
-                    estado.enviando,
-
-                pausado:
-
-                    estado.pausado,
-
-                actual:
-
-                    estado.actual,
-
-                total:
-
-                    estado.total,
-
-                enviados:
-
-                    estado.enviadosOk,
-
-                fallidos:
-
-                    estado.fallidos.length,
-
-                scheduler:{
-
-                    running:
-
-                        sched.running,
-
-                    nextRun:
-
-                        sched.nextRun,
-
-                    stopRequested:
-
-                        sched.stopRequested
-
-                }
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-
-//==============================================================
-// GET /MONITOR
-//==============================================================
-
-router.get(
-
-    '/monitor/:instanceId',
-
-    (req,res)=>{
-
-        try{
-
-            const
-
-                instanceId=
-
-                req.params.instanceId;
-
-            const estado=
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            const sched=
-
-                getScheduler(
-
-                    instanceId
-
-                );
-
-            if(!estado){
-
-                return res.json({
-
-                    ok:false
-
-                });
-
-            }
-
-            return res.json({
-
-                ok:true,
-
-                progreso:{
-
-                    actual:
-
-                        estado.actual,
-
-                    total:
-
-                        estado.total,
-
-                    enviados:
-
-                        estado.enviadosOk,
-
-                    pendientes:
-
-                        estado.total-
-
-                        estado.actual,
-
-                    porcentaje:
-
-                        estado.total===0
-
-                        ?0
-
-                        :Math.round(
-
-                            estado.actual*100/
-
-                            estado.total
-
-                        )
-
-                },
-
-                scheduler:sched,
-
-                antiban:{
-
-                    mensajesHoy:
-
-                        antiBan.getMensajesHoy(
-
-                            instanceId
-
-                        ),
-
-                    mensajesHora:
-
-                        antiBan.getMensajesEstaHora(
-
-                            instanceId
-
-                        ),
-
-                    motivo:
-
-                        antiBan.obtenerMotivoPausa(
-
-                            instanceId
-
-                        ),
-
-                    tiempoRestante:
-
-                        antiBan.obtenerTiempoRestante(
-
-                            instanceId
-
-                        )
-
-                }
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// POST /GUARDAR-MENSAJES
-//==============================================================
-
-router.post(
-
-    '/guardar-mensajes',
-
-    (req, res) => {
-
-        try {
-
-            const {
-
-                instanceId,
-
-                mensajes
-
-            } = req.body;
-
-            if (
-
-                !instanceId
-
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    error:
-
-                        'InstanceId inexistente'
-
-                });
-
-            }
-
-            if (
-
-                !Array.isArray(
-
-                    mensajes
-
-                )
-
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    error:
-
-                        'Mensajes inválidos'
-
-                });
-
-            }
-
-            guardarMensajes(
-
-                instanceId,
-
-                mensajes
-
-            );
-
-            return res.json({
-
-                ok: true
-
-            });
-
-        }
-
-        catch (err) {
-
-            console.error(
-
-                err
-
-            );
-
-            return res.status(500).json({
-
-                ok: false,
-
-                error:
-
-                    err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-
-//==============================================================
-// GET /SCHEDULER
-//==============================================================
-
-router.get(
-
-    '/scheduler/:instanceId',
-
-    (req, res) => {
-
-        try {
-
             const schedulerState =
 
                 getScheduler(
 
-                    req.params.instanceId
+                    instanceId
 
                 );
 
             return res.json({
 
-                ok: true,
+                ok:true,
 
-                scheduler:
+                estado,
 
-                    schedulerState
+                scheduler:schedulerState
 
             });
 
         }
 
-        catch (err) {
+        catch(err){
+
+            console.error(
+
+                '❌ Error obteniendo estado'
+
+            );
 
             console.error(err);
 
             return res.status(500).json({
 
-                ok: false,
+                ok:false,
 
-                error:
-
-                    err.message
+                error:err.message
 
             });
 
@@ -792,12 +1073,9 @@ router.get(
     }
 
 );
-
 
 //==============================================================
 // EXPORTS
 //==============================================================
 
-module.exports =
-
-    router;
+module.exports = router;

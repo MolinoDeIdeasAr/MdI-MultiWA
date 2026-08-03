@@ -1,111 +1,159 @@
+'use strict';
+
 /**
  * =============================================================
  * MdI MultiWA
  * state/scheduler-state.js
  *
- * Scheduler State Manager
+ * Versión : v4.0.0
  *
- * v2.0.0
- * =============================================================
+ * Fuente única del Scheduler.
  *
- * Fuente única del estado del Scheduler.
- *
- * NO envía mensajes.
- * NO aplica reglas anti-baneo.
- *
- * Solamente administra el estado de ejecución.
+ * Mantiene exclusivamente el estado del scheduler.
  *
  * =============================================================
  */
 
-'use strict';
-
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-const SCHEDULER_DIR = path.join(DATA_DIR, 'scheduler');
-
-if (!fs.existsSync(DATA_DIR))
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-
-if (!fs.existsSync(SCHEDULER_DIR))
-    fs.mkdirSync(SCHEDULER_DIR, { recursive: true });
-
-
 //==============================================================
-// ESTADOS POSIBLES
+// DIRECTORIOS
 //==============================================================
 
-const STATUS = {
+const DATA_DIR =
 
-    IDLE: 'IDLE',
+    path.join(
 
-    RUNNING: 'RUNNING',
+        __dirname,
 
-    PAUSED: 'PAUSED',
+        '..',
 
-    WAITING_TIME: 'WAITING_TIME',
+        'data'
 
-    WAITING_HOUR: 'WAITING_HOUR',
+    );
 
-    WAITING_DAY: 'WAITING_DAY',
+const DIR =
 
-    STOPPED: 'STOPPED',
+    path.join(
 
-    FINISHED: 'FINISHED',
+        DATA_DIR,
 
-    ERROR: 'ERROR'
+        'scheduler'
+
+    );
+
+if(
+
+    !fs.existsSync(DATA_DIR)
+
+){
+
+    fs.mkdirSync(
+
+        DATA_DIR,
+
+        {
+
+            recursive:true
+
+        }
+
+    );
+
+}
+
+if(
+
+    !fs.existsSync(DIR)
+
+){
+
+    fs.mkdirSync(
+
+        DIR,
+
+        {
+
+            recursive:true
+
+        }
+
+    );
+
+}
+
+//==============================================================
+// ESTADOS
+//==============================================================
+
+const STATUS={
+
+    IDLE:'IDLE',
+
+    RUNNING:'RUNNING',
+
+    WAITING_TIME:'WAITING_TIME',
+
+    STOPPED:'STOPPED',
+
+    FINISHED:'FINISHED',
+
+    ERROR:'ERROR'
 
 };
 
-
 //==============================================================
-// MAP EN MEMORIA
-//==============================================================
-
-const schedulerMap = new Map();
-
-
-//==============================================================
-// ESTADO DEFAULT
+// MEMORIA
 //==============================================================
 
-function getDefaultScheduler() {
+const schedulerMap =
 
-    return {
+    new Map();
 
-        instanceId: null,
+//==============================================================
+// DEFAULT
+//==============================================================
 
-        status: STATUS.IDLE,
+function getDefaultScheduler(){
 
-        iniciado: null,
+    return{
 
-        finalizado: null,
+        instanceId:null,
 
-        actual: 0,
+        status:STATUS.IDLE,
 
-        total: 0,
+        iniciado:null,
 
-        enviados: 0,
+        finalizado:null,
 
-        fallidos: 0,
+        motivo:'',
 
-        bajas: 0,
+        pausaHasta:null,
 
-        ultimoEnvio: null,
-
-        proximoEnvio: null,
-
-        pausaHasta: null,
-
-        motivo: '',
-
-        mensajeActual: null,
-
-        contactoActual: null
+        proximoEnvio:null
 
     };
+
+}
+
+//==============================================================
+// ARCHIVO
+//==============================================================
+
+function getFile(
+
+    instanceId
+
+){
+
+    return path.join(
+
+        DIR,
+
+        `${instanceId}.json`
+
+    );
 
 }
 
@@ -113,32 +161,55 @@ function getDefaultScheduler() {
 // CARGAR DESDE DISCO
 //==============================================================
 
-function cargarDesdeDisco(instanceId) {
+function cargarDesdeDisco(
 
-    try {
+    instanceId
 
-        const file = path.join(
+){
 
-            SCHEDULER_DIR,
+    try{
 
-            `${instanceId}.json`
+        const file =
 
-        );
+            getFile(
 
-        if (!fs.existsSync(file))
+                instanceId
+
+            );
+
+        if(
+
+            !fs.existsSync(file)
+
+        ){
+
             return null;
+
+        }
 
         return JSON.parse(
 
-            fs.readFileSync(file, 'utf8')
+            fs.readFileSync(
+
+                file,
+
+                'utf8'
+
+            )
 
         );
 
-    } catch (err) {
+    }
+
+    catch(err){
 
         console.error(
 
-            `❌ Error cargando scheduler ${instanceId}:`,
+            `❌ Error cargando Scheduler (${instanceId})`
+
+        );
+
+        console.error(
 
             err.message
 
@@ -150,7 +221,6 @@ function cargarDesdeDisco(instanceId) {
 
 }
 
-
 //==============================================================
 // GUARDAR EN DISCO
 //==============================================================
@@ -161,21 +231,17 @@ function guardarEnDisco(
 
     scheduler
 
-) {
+){
 
-    try {
-
-        const file = path.join(
-
-            SCHEDULER_DIR,
-
-            `${instanceId}.json`
-
-        );
+    try{
 
         fs.writeFileSync(
 
-            file,
+            getFile(
+
+                instanceId
+
+            ),
 
             JSON.stringify(
 
@@ -191,11 +257,17 @@ function guardarEnDisco(
 
         );
 
-    } catch (err) {
+    }
+
+    catch(err){
 
         console.error(
 
-            `❌ Error guardando scheduler ${instanceId}:`,
+            `❌ Error guardando Scheduler (${instanceId})`
+
+        );
+
+        console.error(
 
             err.message
 
@@ -205,37 +277,65 @@ function guardarEnDisco(
 
 }
 
-
 //==============================================================
 // GET SCHEDULER
 //==============================================================
 
-function getScheduler(instanceId) {
+function getScheduler(
 
-    if (!instanceId)
+    instanceId
+
+){
+
+    if(
+
+        !instanceId
+
+    ){
+
         return null;
-
-    if (
-
-        schedulerMap.has(instanceId)
-
-    ) {
-
-        return schedulerMap.get(instanceId);
 
     }
 
-    const delDisco =
+    //----------------------------------------------------------
+    // YA EXISTE EN MEMORIA
+    //----------------------------------------------------------
 
-        cargarDesdeDisco(instanceId);
+    if(
+
+        schedulerMap.has(
+
+            instanceId
+
+        )
+
+    ){
+
+        return schedulerMap.get(
+
+            instanceId
+
+        );
+
+    }
+
+    //----------------------------------------------------------
+    // CARGAR DESDE DISCO
+    //----------------------------------------------------------
 
     const scheduler =
 
-        delDisco ||
+        cargarDesdeDisco(
+
+            instanceId
+
+        ) ||
 
         getDefaultScheduler();
 
-    scheduler.instanceId = instanceId;
+    scheduler.instanceId =
+
+        instanceId;
 
     schedulerMap.set(
 
@@ -250,38 +350,6 @@ function getScheduler(instanceId) {
 }
 
 //==============================================================
-// ACTUALIZAR SCHEDULER
-//==============================================================
-
-function actualizarScheduler(
-
-    instanceId,
-
-    cambios
-
-) {
-
-    const scheduler =
-
-        getScheduler(instanceId);
-
-    if (!scheduler)
-        return null;
-
-    Object.assign(
-
-        scheduler,
-
-        cambios
-
-    );
-
-    return scheduler;
-
-}
-
-
-//==============================================================
 // GUARDAR SCHEDULER
 //==============================================================
 
@@ -289,14 +357,25 @@ function guardarScheduler(
 
     instanceId
 
-) {
+){
 
     const scheduler =
 
-        schedulerMap.get(instanceId);
+        schedulerMap.get(
 
-    if (!scheduler)
+            instanceId
+
+        );
+
+    if(
+
+        !scheduler
+
+    ){
+
         return;
+
+    }
 
     guardarEnDisco(
 
@@ -308,6 +387,61 @@ function guardarScheduler(
 
 }
 
+//==============================================================
+// ACTUALIZAR SCHEDULER
+//==============================================================
+
+function actualizarScheduler(
+
+    instanceId,
+
+    cambios
+
+){
+
+    const scheduler =
+
+        getScheduler(
+
+            instanceId
+
+        );
+
+    if(
+
+        !scheduler
+
+    ){
+
+        return null;
+
+    }
+
+    //----------------------------------------------------------
+    // ACTUALIZAR EN MEMORIA
+    //----------------------------------------------------------
+
+    Object.assign(
+
+        scheduler,
+
+        cambios
+
+    );
+
+    //----------------------------------------------------------
+    // PERSISTIR
+    //----------------------------------------------------------
+
+    guardarScheduler(
+
+        instanceId
+
+    );
+
+    return scheduler;
+
+}
 
 //==============================================================
 // REINICIAR SCHEDULER
@@ -317,7 +451,7 @@ function reiniciarScheduler(
 
     instanceId
 
-) {
+){
 
     const scheduler =
 
@@ -335,18 +469,15 @@ function reiniciarScheduler(
 
     );
 
-    guardarEnDisco(
+    guardarScheduler(
 
-        instanceId,
-
-        scheduler
+        instanceId
 
     );
 
     return scheduler;
 
 }
-
 
 //==============================================================
 // ELIMINAR SCHEDULER
@@ -356,7 +487,7 @@ function eliminarScheduler(
 
     instanceId
 
-) {
+){
 
     schedulerMap.delete(
 
@@ -364,31 +495,45 @@ function eliminarScheduler(
 
     );
 
-    try {
+    try{
 
-        const file = path.join(
+        const file =
 
-            SCHEDULER_DIR,
+            getFile(
 
-            `${instanceId}.json`
+                instanceId
 
-        );
+            );
 
-        if (
+        if(
 
-            fs.existsSync(file)
+            fs.existsSync(
 
-        ) {
+                file
 
-            fs.unlinkSync(file);
+            )
+
+        ){
+
+            fs.unlinkSync(
+
+                file
+
+            );
 
         }
 
-    } catch (err) {
+    }
+
+    catch(err){
 
         console.error(
 
-            `❌ Error eliminando scheduler ${instanceId}:`,
+            `❌ Error eliminando Scheduler (${instanceId})`
+
+        );
+
+        console.error(
 
             err.message
 
@@ -402,29 +547,27 @@ function eliminarScheduler(
 // CHECKPOINT AUTOMÁTICO
 //==============================================================
 
-setInterval(() => {
+setInterval(()=>{
 
-    for (
+    for(
 
-        const [instanceId, scheduler]
+        const [
 
-        of schedulerMap
+            instanceId,
 
-    ) {
+            scheduler
 
-        if (
+        ] of schedulerMap
 
-            scheduler.status === STATUS.RUNNING ||
+    ){
 
-            scheduler.status === STATUS.WAITING_TIME ||
+        if(
 
-            scheduler.status === STATUS.WAITING_HOUR ||
+            scheduler.status===STATUS.RUNNING ||
 
-            scheduler.status === STATUS.WAITING_DAY ||
+            scheduler.status===STATUS.WAITING_TIME
 
-            scheduler.status === STATUS.PAUSED
-
-        ) {
+        ){
 
             guardarEnDisco(
 
@@ -440,29 +583,45 @@ setInterval(() => {
 
 },30000);
 
-
 //==============================================================
 // LISTAR TODOS
 //==============================================================
 
-function getAllSchedulers() {
+function getAllSchedulers(){
 
     return schedulerMap;
 
 }
 
-
 //==============================================================
 // EXPORTS
 //==============================================================
 
-module.exports = {
+module.exports={
+
+    //----------------------------------------------------------
+    // ESTADOS
+    //----------------------------------------------------------
 
     STATUS,
 
+    //----------------------------------------------------------
+    // DEFAULT
+    //----------------------------------------------------------
+
     getDefaultScheduler,
 
+    //----------------------------------------------------------
+    // ACCESO
+    //----------------------------------------------------------
+
     getScheduler,
+
+    getAllSchedulers,
+
+    //----------------------------------------------------------
+    // MODIFICACIÓN
+    //----------------------------------------------------------
 
     actualizarScheduler,
 
@@ -470,8 +629,6 @@ module.exports = {
 
     reiniciarScheduler,
 
-    eliminarScheduler,
-
-    getAllSchedulers
+    eliminarScheduler
 
 };

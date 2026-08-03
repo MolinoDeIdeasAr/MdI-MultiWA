@@ -323,7 +323,7 @@ router.post('/forzar-desconexion', async (req, res) => {
 
         // 1. Intentar destroy del cliente si existe (ignorar errores)
         try {
-            const client = sessionManager.getClient(userId, instanceId);
+            const client = sessionManager.getClient(instanceId);
             if (client) {
                 await Promise.race([
                     client.destroy(),

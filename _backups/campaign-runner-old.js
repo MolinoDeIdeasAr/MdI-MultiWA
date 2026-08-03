@@ -19,16 +19,6 @@
  * =============================================================
  */
 
-//==================================================
-// DESARROLLO
-//==================================================
-
-const {
-
-    BYPASS_ANTIBAN
-
-} = require('../config/env');
-
 //==============================================================
 // DEPENDENCIAS
 //==============================================================
@@ -1087,5 +1077,329 @@ module.exports = {
     obtenerMensajeAleatorio,
 
     marcarContacto
+
+};
+
+//==============================================================
+// FINALIZAR CAMPAÑA
+//==============================================================
+
+function finalizarCampaña(
+
+    instanceId,
+
+    estado
+
+) {
+
+    //----------------------------------------------------------
+    // ESTADO
+    //----------------------------------------------------------
+
+    estado.enviando = false;
+
+    estado.pausado = false;
+
+    estado.campanaFinalizada = true;
+
+    //----------------------------------------------------------
+    // LIMPIAR TEMPORALES
+    //----------------------------------------------------------
+
+    estado.contactoActual = null;
+
+    estado.mensajeActual = null;
+
+    //----------------------------------------------------------
+    // GUARDAR
+    //----------------------------------------------------------
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    //----------------------------------------------------------
+    // LOG
+    //----------------------------------------------------------
+
+    console.log('');
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.log(
+
+        '✅ CAMPAÑA FINALIZADA'
+
+    );
+
+    console.log(
+
+        `Instancia : ${instanceId}`
+
+    );
+
+    console.log(
+
+        `Total     : ${estado.total}`
+
+    );
+
+    console.log(
+
+        `Enviados  : ${estado.enviadosOk}`
+
+    );
+
+    console.log(
+
+        `Fallidos  : ${estado.fallidos.length}`
+
+    );
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.log('');
+
+    //----------------------------------------------------------
+    // RESPUESTA
+    //----------------------------------------------------------
+
+    return {
+
+        tipo: RESULTADO.FINALIZADA,
+
+        enviados:
+
+            estado.enviadosOk,
+
+        fallidos:
+
+            estado.fallidos.length,
+
+        total:
+
+            estado.total
+
+    };
+
+}
+
+//==============================================================
+// OBTENER NÚMERO
+//==============================================================
+
+function obtenerNumero(
+
+    contacto
+
+) {
+
+    const numero =
+
+        String(
+
+            contacto.numero ||
+
+            contacto.NUMERO ||
+
+            ''
+
+        )
+
+        .replace(/\D/g, '');
+
+    return numero;
+
+}
+
+//==============================================================
+// MARCAR CONTACTO
+//==============================================================
+
+function marcarContacto(
+
+    contacto,
+
+    estado
+
+) {
+
+    contacto.estadoEnvio = estado;
+
+    contacto.fechaEnvio =
+
+        new Date().toISOString();
+
+}
+
+//==============================================================
+// LIMPIAR CAMPOS TEMPORALES
+//==============================================================
+
+function limpiarTemporales(
+
+    contacto
+
+) {
+
+    delete contacto.__chatId;
+
+    delete contacto.__numero;
+
+}
+
+//==============================================================
+// LOG ENVÍO
+//==============================================================
+
+function logEnvio(
+
+    contacto,
+
+    mensaje
+
+) {
+
+    console.log('');
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.log(
+
+        `👤 ${contacto.nombre || contacto.NOMBRE || '-'}`
+
+    );
+
+    console.log(
+
+        `📱 ${contacto.numero || contacto.NUMERO || '-'}`
+
+    );
+
+    console.log(
+
+        `💬 ${mensaje.substring(0,80)}${mensaje.length>80?'...':''}`
+
+    );
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.log('');
+
+}
+
+//==============================================================
+// LOG ERROR
+//==============================================================
+
+function logError(
+
+    contacto,
+
+    motivo
+
+) {
+
+    console.log('');
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.error(
+
+        `❌ ${contacto.numero || contacto.NUMERO || '-'}`
+
+    );
+
+    console.error(
+
+        motivo
+
+    );
+
+    console.log(
+
+        '========================================'
+
+    );
+
+    console.log('');
+
+}
+
+//==============================================================
+// EXPORTS
+//==============================================================
+
+module.exports = {
+
+    //----------------------------------------------------------
+    // RUNNER
+    //----------------------------------------------------------
+
+    run,
+
+    //----------------------------------------------------------
+    // RESULTADOS
+    //----------------------------------------------------------
+
+    RESULTADO,
+
+    //----------------------------------------------------------
+    // HELPERS
+    //----------------------------------------------------------
+
+    obtenerContactoActual,
+
+    validarContacto,
+
+    validarHorario,
+
+    prepararMensaje,
+
+    seleccionarMensajeAleatorio,
+
+    enviarContacto,
+
+    enviarTextoOImagen,
+
+    enviarAudio,
+
+    registrarExito,
+
+    registrarError,
+
+    finalizarCampaña,
+
+    obtenerNumero,
+
+    marcarContacto,
+
+    limpiarTemporales,
+
+    logEnvio,
+
+    logError
 
 };

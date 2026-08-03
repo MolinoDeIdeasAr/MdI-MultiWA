@@ -544,45 +544,84 @@ function borrarImagen() {
 
 // ── Envío de campaña ──
 var formEnvio = document.getElementById('formEnvio');
+
 if (formEnvio) {
-    formEnvio.addEventListener('submit', function(e) {
+
+    formEnvio.addEventListener('submit', async function(e){
+
         e.preventDefault();
+
         var btn = document.getElementById('btn-enviar');
         var msgEl = document.getElementById('envio-msg');
+
         btn.disabled = true;
         btn.textContent = '⏳ Iniciando campaña...';
+
         msgEl.style.display = 'none';
 
-        fetch(
+        try{
 
-    '/api/carga/cargar',
+            const res = await fetch('/api/envio/enviar',{
 
-    {
+                method:'POST',
 
-        method: 'POST',
+                headers:{
+                    'Content-Type':'application/json'
+                },
 
-        headers: {
+                body:JSON.stringify({
 
-            'Content-Type': 'application/json'
+                    instanceId:'<%= activeId %>'
 
-        },
+                })
 
-        body: JSON.stringify({
+            });
 
-            urlDrive: url
+            const data = await res.json();
 
-        })
+            if(!res.ok){
+
+                throw new Error(data.error || 'Error');
+
+            }
+
+            msgEl.style.display='block';
+            msgEl.style.background='#d4edda';
+            msgEl.style.color='#155724';
+
+            msgEl.innerHTML='✅ Campaña iniciada correctamente';
+
+// Esperar medio segundo para que el usuario vea el mensaje
+setTimeout(()=>{
+
+    if(data.monitor){
+
+        window.location.href=data.monitor;
+
+    }else{
+
+        window.location.href=
+            "/monitor?instanceId=<%= activeId %>";
 
     }
 
-)
-            .catch(function(e) {
-                msgEl.style.cssText = 'display:block; background:#f8d7da; color:#721c24; padding:10px; border-radius:6px; margin-bottom:10px; text-align:center;';
-                msgEl.textContent = '❌ ' + e.message;
-                btn.disabled = false;
-                btn.textContent = '🚀 INICIAR CAMPAÑA';
-            });
+},500);
+
+        }catch(err){
+
+            msgEl.style.display='block';
+            msgEl.style.background='#f8d7da';
+            msgEl.style.color='#721c24';
+
+            msgEl.innerHTML='❌ '+err.message;
+
+            btn.disabled=false;
+            btn.textContent='🚀 INICIAR CAMPAÑA';
+
+        }
+
     });
+
 }
 
 // ── Autoguardado de mensajes ──

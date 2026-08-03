@@ -4,6 +4,9 @@ const sessionManager = require('../services/session-manager');
 const { guardarEstado, cargarEstado, getDefaultEstado } = require('../state/estado');
 const { descargarGoogleSheets } = require('../services/google-drive');
 const xlsx = require('xlsx');
+const {
+    guardarInstancia
+} = require('../services/instancias-persistencia');
 
 router.post('/cargar', async (req, res) => {
     try {
@@ -208,9 +211,18 @@ router.post('/cargar', async (req, res) => {
         estado.listo              = instancia.listo || false;
         estado.numeroWhatsApp     = instancia.numero || '';
 
-        instancia.estado = estado;
-        guardarEstado(estado, instanceId);
-        sessionManager.guardarInstancia(userId, instanceId, instancia);
+instancia.estado = estado;
+
+guardarEstado(
+    estado,
+    instanceId
+);
+
+guardarInstancia(
+    userId,
+    instanceId,
+    instancia
+);
 
         console.log(`💾 Contactos guardados para instancia ${instanceId}`);
 

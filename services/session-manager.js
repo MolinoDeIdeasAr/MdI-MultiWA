@@ -1,504 +1,1185 @@
-/**
- * =============================================================
- *  MdI MultiWA — services/session-manager.js
- *  Versión : v1.38.0
- *  Fecha   : 2026-07-09
- * =============================================================
- *  CHANGELOG
- *  ---------
- *  v1.38.0 — FIX RAÍZ: separar carpetas de LocalAuth y Chrome.
- *             LocalAuth usa ./sessions/ (solo credenciales WA).
- *             Chrome usa ./chrome-profiles/ (perfil del browser).
- *             Antes ambos compartían la misma carpeta, causando
- *             LOGOUT/UNPAIRED/EBUSY al iniciarse.
- *             Elimina whatsapp-client.js como segunda fábrica.
- *             new Client() solo existe acá.
- *             removeAllListeners() en TODOS los eventos antes
- *             de re-registrar (ready, authenticated, disconnected,
- *             message) para evitar handlers duplicados.
- *             gracefulDestroy() usa browser.close() + destroy()
- *             con timeout para liberar archivos antes de borrar.
- *  v1.37.0 — StateManager centralizado, ready() sin reemplazar ref.
- *  v1.36.0 — Handler de mensajes separado.
- *  v1.35.x — Filtros anti-basura, límite QRs, timeout Puppeteer.
- * =============================================================
- */
 'use strict';
 
-const fs   = require('fs');
+/**
+ * =============================================================
+ * MdI MultiWA
+ * services/session-manager.js
+ *
+ * Versión : v2.0.0
+ *
+ * REBUILD TOTAL
+ * =============================================================
+ */
+
+const fs = require('fs');
 const path = require('path');
-const { Client, LocalAuth } = require('whatsapp-web.js');
 const QRCode = require('qrcode');
-const { getEstadoInstancia, actualizarEstado, guardarEstadoSeguro } = require('../state/estado');
-const { handleInboundMessage } = require('./inbound-message-handler');
 
-const sessions    = new Map();  // userId → { instances: Map, activeId }
-const clients     = new Map();  // `${userId}_${instanceId}` → Client
-const userSockets = new Map();  // userId → Set<Socket>
+const { Client, LocalAuth } =
+    require('whatsapp-web.js');
 
-const DATA_DIR          = path.join(__dirname, '..', 'data');
-const INSTANCIAS_FILE   = path.join(DATA_DIR, 'instancias.json');
-// FIX v1.38.0: carpetas SEPARADAS para LocalAuth y Chrome
-const SESSIONS_DIR      = path.join(__dirname, '..', 'sessions');       // credenciales WA
-const CHROME_PROFILES   = path.join(__dirname, '..', 'chrome-profiles'); // perfiles Chrome
+const {
+    getEstadoInstancia,
+    actualizarEstado,
+    guardarEstadoSeguro
+} = require('../state/estado');
 
-if (!fs.existsSync(DATA_DIR))        fs.mkdirSync(DATA_DIR,        { recursive: true });
-if (!fs.existsSync(SESSIONS_DIR))    fs.mkdirSync(SESSIONS_DIR,    { recursive: true });
-if (!fs.existsSync(CHROME_PROFILES)) fs.mkdirSync(CHROME_PROFILES, { recursive: true });
+const {
+    handleInboundMessage
+} = require('./inbound-message-handler');
 
-// ─────────────────────────────────────────────
-//  BUSCAR CHROME EN WINDOWS
-// ─────────────────────────────────────────────
-function findChromePath() {
-    const paths = [
+const {
+    obtenerInstanciasPorUsuario,
+    obtenerTodosLosUsuarios,
+    guardarInstancia: guardarInstanciaPersistencia,
+    eliminarInstancia
+} = require('./instancias-persistencia');
+
+
+//==============================================================
+// CONSTANTES
+//==============================================================
+
+const MAX_QR_ATTEMPTS = 5;
+
+const sessions = new Map();
+const clients = new Map();
+const userSockets = new Map();
+
+const SESSIONS_DIR =
+    path.join(__dirname,'..','sessions');
+
+const CHROME_PROFILES =
+    path.join(__dirname,'..','chrome-profiles');
+
+fs.mkdirSync(SESSIONS_DIR,{recursive:true});
+fs.mkdirSync(CHROME_PROFILES,{recursive:true});
+
+
+//==============================================================
+// CHROME
+//==============================================================
+
+function findChromePath(){
+
+    const posibles=[
+
         'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+
         'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        (process.env.LOCALAPPDATA || '') + '\\Google\\Chrome\\Application\\chrome.exe'
+
+        path.join(
+            process.env.LOCALAPPDATA || '',
+            'Google',
+            'Chrome',
+            'Application',
+            'chrome.exe'
+        )
+
     ];
-    return paths.find(p => fs.existsSync(p)) || undefined;
+
+    return posibles.find(
+
+        p=>fs.existsSync(p)
+
+    );
+
 }
 
-// ─────────────────────────────────────────────
-//  QR
-// ─────────────────────────────────────────────
-async function generarQrImagen(qr) {
-    try {
-        if (qr && (qr.startsWith('2@') || qr.startsWith('3@'))) {
-            return await QRCode.toDataURL(qr, {
-                errorCorrectionLevel: 'H', margin: 2, width: 300,
-                color: { dark: '#000000', light: '#ffffff' }
-            });
+
+//==============================================================
+// QR
+//==============================================================
+
+async function generarQrImagen(qr){
+
+    try{
+
+        if(
+
+            typeof qr==='string' &&
+
+            qr.startsWith('data:image')
+
+        ){
+
+            return qr;
+
         }
-        if (qr.startsWith('data:image')) return qr;
-        return `data:image/png;base64,${qr}`;
-    } catch (e) {
-        console.error('Error generando QR:', e.message);
+
+        return await QRCode.toDataURL(
+
+            qr,
+
+            {
+
+                errorCorrectionLevel:'H',
+
+                margin:2,
+
+                width:300
+
+            }
+
+        );
+
+    }
+
+    catch(err){
+
+        console.error(err);
+
         return qr;
+
     }
+
 }
 
-// ─────────────────────────────────────────────
-//  DESTRUIR CLIENTE (graceful)
-//  Cierra browser primero, luego destroy()
-//  para liberar archivos antes de borrar carpetas
-// ─────────────────────────────────────────────
-async function gracefulDestroy(client) {
-    if (!client) return;
-    // 1. Cerrar browser (libera archivos de Chrome)
-    try {
-        const browser = client.pupPage?.browser?.() || client.browser;
-        if (browser) await Promise.race([browser.close(), new Promise(r => setTimeout(r, 3000))]);
-    } catch (_) {}
-    // 2. Destroy del cliente WA
-    try {
-        await Promise.race([client.destroy(), new Promise(r => setTimeout(r, 3000))]);
-    } catch (_) {}
-}
 
-// ─────────────────────────────────────────────
-//  PERSISTENCIA INSTANCIAS.JSON
-// ─────────────────────────────────────────────
-function guardarInstancia(userId, instanceId, data) {
-    try {
-        let todas = {};
-        if (fs.existsSync(INSTANCIAS_FILE)) {
-            todas = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
+//==============================================================
+// DESTROY
+//==============================================================
+
+async function gracefulDestroy(client){
+
+    if(!client)
+        return;
+
+    try{
+
+        client.removeAllListeners();
+
+    }
+
+    catch{}
+
+    try{
+
+        if(client.browser){
+
+            await client.browser.close();
+
         }
-        if (!todas[userId]) todas[userId] = [];
-        const idx  = todas[userId].findIndex(i => i.id === instanceId);
-        const item = {
-            id    : instanceId,
-            numero: data.numero || '',
-            listo : data.listo  || false,
-            fecha : data.fecha  || new Date().toISOString()
-        };
-        if (idx !== -1) todas[userId][idx] = item;
-        else            todas[userId].push(item);
-        fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(todas, null, 2));
-    } catch (e) {
-        console.error('Error guardando instancia:', e.message);
+
     }
-}
 
-function guardarInstanciaEnDisco(userId, instanceId, data) {
-    return guardarInstancia(userId, instanceId, data);
-}
+    catch{}
 
-function cargarInstancias() {
-    try {
-        if (!fs.existsSync(INSTANCIAS_FILE)) return;
-        const data = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
-        for (const [userId, instancias] of Object.entries(data)) {
-            if (!sessions.has(userId)) {
-                sessions.set(userId, { instances: new Map(), activeId: null });
-            }
-            const s = sessions.get(userId);
-            for (const inst of instancias) {
-                // Verificar que exista la carpeta de sesión WA
-                const sessionDir = path.join(SESSIONS_DIR, `session-${inst.id}`);
-                if (!fs.existsSync(sessionDir)) continue;
-                const estado = getEstadoInstancia(inst.id);
-                s.instances.set(inst.id, {
-                    numero: inst.numero || '',
-                    listo : false,
-                    estado,
-                    client: null
-                });
-            }
-        }
-    } catch (e) {
-        console.error('Error cargando instancias:', e.message);
+    try{
+
+        await client.destroy();
+
     }
+
+    catch{}
+
 }
 
-// ─────────────────────────────────────────────
-//  GETTERS
-// ─────────────────────────────────────────────
-function getUserSession(userId)      { return sessions.get(userId) || null; }
-function getActiveInstanceId(userId) { return sessions.get(userId)?.activeId || null; }
-function getQrCode()                 { return null; }
-function getClient(userId, instanceId) {
-    return clients.get(`${userId}_${instanceId}`) || null;
+
+//==============================================================
+// GETTERS
+//==============================================================
+
+function getUserSession(userId){
+
+    return sessions.get(userId) || null;
+
 }
 
-function getUserInstances(userId) {
-    const s = sessions.get(userId);
-    if (!s) return [];
-    return [...s.instances.entries()].map(([id, inst]) => ({
-        id,
-        numero: inst.numero || '',
-        listo : inst.listo  || false
-    }));
+function getClient(instanceId){
+
+    return clients.get(instanceId) || null;
+
 }
 
-function getEstado(userId) {
-    const s = sessions.get(userId);
-    if (!s || !s.activeId) return null;
-    const inst = s.instances.get(s.activeId);
-    if (!inst) return null;
-    if (inst.estado) {
-        inst.estado.listo          = inst.listo;
-        inst.estado.numeroWhatsApp = inst.numero || inst.estado.numeroWhatsApp;
+function getActiveInstanceId(userId){
+
+    return sessions.get(userId)?.activeId || null;
+
+}
+
+function getQrCode(){
+
+    return null;
+
+}
+
+function getEstado(userId){
+
+    const session = sessions.get(userId);
+
+    if(!session)
+        return null;
+
+    if(!session.activeId)
+        return null;
+
+    return getEstadoInstancia(
+
+        session.activeId
+
+    );
+
+}
+
+function getUserInstances(userId){
+
+    const session = sessions.get(userId);
+
+    if(!session)
+        return [];
+
+    return [...session.instances.entries()].map(
+
+        ([id,inst])=>({
+
+            id,
+
+            numero:inst.numero || '',
+
+            listo:inst.listo || false,
+
+            estado:inst.estado || null
+
+        })
+
+    );
+
+}
+
+function setActiveInstance(
+
+    userId,
+
+    instanceId
+
+){
+
+    const session = sessions.get(userId);
+
+    if(!session)
+        return;
+
+    if(!session.instances.has(instanceId))
+        return;
+
+    session.activeId = instanceId;
+
+}
+
+
+//==============================================================
+// SOCKETS
+//==============================================================
+
+function addSocket(userId,socket){
+
+    if(!userSockets.has(userId)){
+
+        userSockets.set(
+
+            userId,
+
+            new Set()
+
+        );
+
     }
-    return inst.estado || null;
-}
 
-function setActiveInstance(userId, instanceId) {
-    const s = sessions.get(userId);
-    if (!s || !s.instances.has(instanceId)) return;
-    s.activeId = instanceId;
-    guardarEstadoSeguro(instanceId);
-}
-
-// ─────────────────────────────────────────────
-//  SOCKETS
-// ─────────────────────────────────────────────
-function addSocket(userId, socket) {
-    if (!userSockets.has(userId)) userSockets.set(userId, new Set());
     userSockets.get(userId).add(socket);
+
 }
 
-function removeSocket(userId, socket) {
-    if (!userSockets.has(userId)) return;
-    userSockets.get(userId).delete(socket);
-    if (userSockets.get(userId).size === 0) userSockets.delete(userId);
+function removeSocket(userId,socket){
+
+    const sockets = userSockets.get(userId);
+
+    if(!sockets)
+        return;
+
+    sockets.delete(socket);
+
+    if(!sockets.size){
+
+        userSockets.delete(userId);
+
+    }
+
 }
 
-function emitToUser(userId, event, data) {
-    if (!userSockets.has(userId)) return;
-    for (const sock of userSockets.get(userId)) sock.emit(event, data);
+function emitToUser(
+
+    userId,
+
+    event,
+
+    data
+
+){
+
+    const sockets = userSockets.get(userId);
+
+    if(!sockets)
+        return;
+
+    for(const socket of sockets){
+
+        try{
+
+            socket.emit(
+
+                event,
+
+                data
+
+            );
+
+        }
+
+        catch{}
+
+    }
+
 }
 
-function emitQr(userId, qr)      { emitToUser(userId, 'qr', { qr }); }
-function emitReady(userId, data) { emitToUser(userId, 'whatsapp_ready', data); }
+function emitQr(userId,qr){
 
-function emitInstancesUpdate(userId) {
-    const instancias = getUserInstances(userId);
-    emitToUser(userId, 'instances_update', { instancias });
+    emitToUser(
+
+        userId,
+
+        'qr',
+
+        {qr}
+
+    );
+
 }
 
-// ─────────────────────────────────────────────
-//  CREAR SESIÓN — única fábrica de Client
-// ─────────────────────────────────────────────
-async function startSession(userId, io, instanceId) {
-    console.log(`📱 Iniciando sesión: ${instanceId}`);
-    const key = `${userId}_${instanceId}`;
+function emitReady(userId,data){
 
-    // Destruir cliente anterior si existe
-    if (clients.has(key)) {
-        await gracefulDestroy(clients.get(key));
-        clients.delete(key);
-    }
+    emitToUser(
 
-    if (!sessions.has(userId)) {
-        sessions.set(userId, { instances: new Map(), activeId: null });
-    }
-    const s = sessions.get(userId);
+        userId,
 
-    const estadoInstancia = getEstadoInstancia(instanceId);
+        'whatsapp_ready',
 
-    if (!s.instances.has(instanceId)) {
-        s.instances.set(instanceId, {
-            numero: estadoInstancia.numeroWhatsApp || '',
-            listo : false,
-            estado: estadoInstancia,
-            client: null
-        });
-        if (!s.activeId) s.activeId = instanceId;
-    } else {
-        s.instances.get(instanceId).estado = estadoInstancia;
-    }
+        data
 
-    // FIX v1.38.0: carpeta de Chrome Profile SEPARADA de LocalAuth
-    const chromeProfileDir = path.join(CHROME_PROFILES, instanceId);
-    if (!fs.existsSync(chromeProfileDir)) fs.mkdirSync(chromeProfileDir, { recursive: true });
+    );
 
-    const chromePath = findChromePath();
-    const puppeteerConfig = {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            // FIX v1.38.0: user-data-dir apunta a chrome-profiles/, NO a sessions/
-            `--user-data-dir=${chromeProfileDir}`
-        ]
-    };
-    if (chromePath) {
-        puppeteerConfig.executablePath = chromePath;
-        console.log(`🌐 Usando Chrome: ${chromePath}`);
-    }
-
-    const client = new Client({
-        // FIX v1.38.0: LocalAuth usa sessions/ — carpeta exclusiva para credenciales WA
-        authStrategy: new LocalAuth({
-            clientId: instanceId,
-            dataPath: SESSIONS_DIR
-        }),
-        puppeteer: puppeteerConfig
-    });
-
-    clients.set(key, client);
-    s.instances.get(instanceId).client = client;
-
-    // ── QR (límite 5 intentos) ──
-    let qrCount = 0;
-    client.on('qr', async (qr) => {
-        qrCount++;
-        if (qrCount > 5) {
-            console.warn(`⚠️ Demasiados QRs para ${instanceId} — abortando`);
-            await gracefulDestroy(client);
-            clients.delete(key);
-            const i = s.instances.get(instanceId);
-            if (i) { i.listo = false; i.client = null; }
-            emitInstancesUpdate(userId);
-            return;
-        }
-        console.log(`📱 QR ${qrCount}/5 → ${instanceId}`);
-        const qrImage = await generarQrImagen(qr);
-        emitQr(userId, qrImage);
-        if (io) io.emit('qr', { qr: qrImage });
-    });
-
-    // FIX v1.38.0: removeAllListeners en TODOS los eventos para evitar duplicados
-    // si ready() se dispara más de una vez (posible en reconexiones)
-    client.on('authenticated', () => {
-        console.log(`🔐 Autenticado: ${instanceId}`);
-    });
-
-    // ── READY ──
-    client.on('ready', async () => {
-        console.log(`✅ Cliente listo: ${instanceId}`);
-
-        let numero = '';
-        try {
-            const wid = client.info?.wid;
-            if (wid) {
-                if (typeof wid === 'object' && wid.user)  numero = wid.user;
-                else if (typeof wid === 'string')          numero = wid.split('@')[0];
-                else if (wid._serialized)                  numero = wid._serialized.split('@')[0];
-            }
-            if (!numero && client.info?.me?._serialized) {
-                numero = client.info.me._serialized.split('@')[0];
-            }
-            if (numero) console.log(`📞 Número: ${numero}`);
-            else        console.warn(`⚠️ Sin número para ${instanceId}`);
-        } catch (e) {
-            console.warn(`⚠️ Error obteniendo número: ${e.message}`);
-        }
-
-        const inst = s.instances.get(instanceId);
-        if (inst) {
-            inst.numero = numero;
-            inst.listo  = true;
-            actualizarEstado(instanceId, { listo: true, numeroWhatsApp: numero });
-        }
-
-        if (!s.activeId) s.activeId = instanceId;
-
-        guardarInstancia(userId, instanceId, { numero, listo: true });
-        guardarEstadoSeguro(instanceId);
-
-        console.log(`📱 Conectada: ${instanceId} — ${numero || 'Sin número'}`);
-        emitReady(userId, { instanceId, numero });
-        if (io) io.emit('whatsapp_ready', { instanceId, numero });
-        emitInstancesUpdate(userId);
-
-        // FIX v1.38.0: removeAllListeners('message') evita handlers duplicados
-        client.removeAllListeners('message');
-        client.on('message', async (msg) => {
-            try {
-                await handleInboundMessage({
-                    msg, client, userId, instanceId,
-                    numeroInstancia: numero,
-                    sessions, io, userSockets
-                });
-            } catch (err) {
-                console.error(`❌ handleInboundMessage: ${err.message}`);
-            }
-        });
-    });
-
-    client.on('disconnected', async (reason) => {
-        console.log(`⚠️ Desconectado ${instanceId}: ${reason}`);
-        const i = s.instances.get(instanceId);
-        if (i) {
-            i.listo = false;
-            actualizarEstado(instanceId, { listo: false });
-            guardarInstancia(userId, instanceId, { ...i, listo: false });
-        }
-        emitInstancesUpdate(userId);
-    });
-
-    try {
-        await Promise.race([
-            client.initialize(),
-            new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Timeout Puppeteer (2min)')), 120000)
-            )
-        ]);
-        return client;
-    } catch (err) {
-        console.error(`❌ Error inicializando ${instanceId}: ${err.message}`);
-        await gracefulDestroy(client);
-        clients.delete(key);
-        const i = s.instances.get(instanceId);
-        if (i) { i.listo = false; i.client = null; }
-        emitInstancesUpdate(userId);
-        throw err;
-    }
 }
 
-// ─────────────────────────────────────────────
-//  ELIMINAR INSTANCIA
-// ─────────────────────────────────────────────
-async function removeInstance(userId, instanceId) {
-    const key    = `${userId}_${instanceId}`;
-    const client = clients.get(key);
+function emitInstancesUpdate(userId){
 
-    if (client) {
-        await gracefulDestroy(client);
-        clients.delete(key);
-    }
+    emitToUser(
 
-    const s = sessions.get(userId);
-    if (s) {
-        s.instances.delete(instanceId);
-        if (s.activeId === instanceId) {
-            const resto = [...s.instances.keys()];
-            s.activeId  = resto.length > 0 ? resto[0] : null;
+        userId,
+
+        'instances_update',
+
+        {
+
+            instancias:
+
+                getUserInstances(userId)
+
         }
-    }
 
-    // FIX v1.38.0: borrar AMBAS carpetas (sessions + chrome-profiles)
-    const dirsToDelete = [
-        path.join(SESSIONS_DIR,    `session-${instanceId}`),
-        path.join(CHROME_PROFILES, instanceId)
-    ];
+    );
 
-    for (const dir of dirsToDelete) {
-        if (!fs.existsSync(dir)) continue;
-        await new Promise(r => setTimeout(r, 2000)); // esperar que Chrome libere
-        try {
-            fs.rmSync(dir, { recursive: true, force: true });
-            console.log(`🗑️ Borrado: ${dir}`);
-        } catch (e) {
-            console.warn(`⚠️ EBUSY — reintento en 3s: ${path.basename(dir)}`);
-            setTimeout(() => {
-                try { fs.rmSync(dir, { recursive: true, force: true }); }
-                catch (_) { console.warn(`⚠️ Borrar manualmente: ${dir}`); }
-            }, 3000);
-        }
-    }
-
-    if (fs.existsSync(INSTANCIAS_FILE)) {
-        try {
-            const data = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
-            if (data[userId]) {
-                data[userId] = data[userId].filter(i => i.id !== instanceId);
-                if (data[userId].length === 0) delete data[userId];
-                fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(data, null, 2));
-            }
-        } catch (_) {}
-    }
-    console.log(`🗑️ Instancia ${instanceId} eliminada`);
-}
-
-// ─────────────────────────────────────────────
-//  RESTAURAR AL ARRANCAR
-// ─────────────────────────────────────────────
-async function restaurarTodas(io) {
-    console.log('🔄 Cargando instancias desde disco...');
-    cargarInstancias();
-    const promesas = [];
-    for (const [userId, s] of sessions) {
-        for (const [instanceId] of s.instances) {
-            if (fs.existsSync(path.join(SESSIONS_DIR, `session-${instanceId}`))) {
-                promesas.push(
-                    startSession(userId, io, instanceId).catch(e =>
-                        console.error(`❌ Restaurando ${instanceId}: ${e.message}`)
-                    )
-                );
-            }
-        }
-    }
-    await Promise.all(promesas);
-    console.log('✅ Restauración completada');
 }
 
 //==============================================================
-// OBTENER IDS DE INSTANCIAS ACTIVAS
+// START SESSION
+//==============================================================
+
+async function startSession(userId, io, instanceId) {
+
+    if (clients.has(instanceId)) {
+
+        console.log(`♻️ Reutilizando instancia ${instanceId}`);
+
+        return clients.get(instanceId);
+
+    }
+
+    console.log(`📱 Iniciando sesión ${instanceId}`);
+
+    //----------------------------------------------------------
+    // SESIÓN
+    //----------------------------------------------------------
+
+    if (!sessions.has(userId)) {
+
+        sessions.set(userId, {
+
+            activeId: instanceId,
+
+            instances: new Map()
+
+        });
+
+    }
+
+    const userSession = sessions.get(userId);
+
+    //----------------------------------------------------------
+    // ESTADO
+    //----------------------------------------------------------
+
+    const estado = getEstadoInstancia(instanceId);
+
+    if (!userSession.instances.has(instanceId)) {
+
+        userSession.instances.set(
+
+            instanceId,
+
+            {
+
+                numero: estado.numeroWhatsApp || '',
+
+                listo: false,
+
+                estado,
+
+                client: null
+
+            }
+
+        );
+
+    }
+
+    //----------------------------------------------------------
+    // CHROME PROFILE
+    //----------------------------------------------------------
+
+    const chromeProfile = path.join(
+
+        CHROME_PROFILES,
+
+        instanceId
+
+    );
+
+    fs.mkdirSync(
+
+        chromeProfile,
+
+        {
+
+            recursive: true
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // CLIENT
+    //----------------------------------------------------------
+
+    const client = new Client({
+
+        authStrategy: new LocalAuth({
+
+            clientId: instanceId,
+
+            dataPath: SESSIONS_DIR
+
+        }),
+
+        puppeteer: {
+
+            headless: true,
+
+            executablePath: findChromePath(),
+
+            args: [
+
+                '--no-sandbox',
+
+                '--disable-setuid-sandbox',
+
+                '--disable-dev-shm-usage',
+
+                '--disable-gpu',
+
+                `--user-data-dir=${chromeProfile}`
+
+            ]
+
+        }
+
+    });
+
+    clients.set(
+
+        instanceId,
+
+        client
+
+    );
+
+    userSession.instances.get(instanceId).client = client;
+
+    //----------------------------------------------------------
+    // QR
+    //----------------------------------------------------------
+
+    let qrCount = 0;
+
+    client.on(
+
+        'qr',
+
+        async qr => {
+
+            qrCount++;
+
+            if (qrCount > MAX_QR_ATTEMPTS)
+
+                return;
+
+            const qrImage =
+
+                await generarQrImagen(qr);
+
+            emitQr(
+
+                userId,
+
+                qrImage
+
+            );
+
+            if (io) {
+
+                io.emit(
+
+                    'qr',
+
+                    {
+
+                        instanceId,
+
+                        qr: qrImage
+
+                    }
+
+                );
+
+            }
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // AUTH
+    //----------------------------------------------------------
+
+    client.once(
+
+        'authenticated',
+
+        () => {
+
+            console.log(
+
+                `🔐 ${instanceId} autenticado`
+
+            );
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // READY
+    //----------------------------------------------------------
+
+    client.once(
+
+        'ready',
+
+        async () => {
+
+            console.log(
+
+                `✅ ${instanceId} listo`
+
+            );
+
+            let numero = '';
+
+            try {
+
+                numero = client.info.wid.user;
+
+            }
+
+            catch {}
+
+            const inst =
+
+                userSession.instances.get(instanceId);
+
+            inst.numero = numero;
+
+            inst.listo = true;
+
+            guardarInstancia(
+
+                userId,
+
+                instanceId,
+
+                {
+
+                    numero,
+
+                    listo: true,
+
+                    estado: inst.estado
+
+                }
+
+            );
+
+            actualizarEstado(
+
+                instanceId,
+
+                {
+
+                    listo: true,
+
+                    numeroWhatsApp: numero
+
+                }
+
+            );
+
+            guardarEstadoSeguro(instanceId);
+
+            emitReady(
+
+                userId,
+
+                {
+
+                    instanceId,
+
+                    numero
+
+                }
+
+            );
+
+            emitInstancesUpdate(userId);
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // MESSAGE
+    //----------------------------------------------------------
+
+    client.on(
+
+        'message',
+
+        async msg => {
+
+            try {
+
+                await handleInboundMessage({
+
+                    msg,
+
+                    client,
+
+                    userId,
+
+                    instanceId,
+
+                    numeroInstancia:
+
+                        client.info?.wid?.user || '',
+
+                    sessions,
+
+                    io,
+
+                    userSockets
+
+                });
+
+            }
+
+            catch (err) {
+
+                console.error(err);
+
+            }
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // DESCONECTADO
+    //----------------------------------------------------------
+
+    client.once(
+
+        'disconnected',
+
+        reason => {
+
+            console.log(
+
+                `⚠️ ${instanceId} desconectado (${reason})`
+
+            );
+
+            const inst =
+
+                userSession.instances.get(instanceId);
+
+            if (inst)
+
+                inst.listo = false;
+
+            actualizarEstado(
+
+                instanceId,
+
+                {
+
+                    listo: false
+
+                }
+
+            );
+
+            emitInstancesUpdate(userId);
+
+            clients.delete(instanceId);
+
+        }
+
+    );
+
+    //----------------------------------------------------------
+    // INITIALIZE
+    //----------------------------------------------------------
+
+    await client.initialize();
+
+    return client;
+
+}
+
+//==============================================================
+// REMOVE INSTANCE
+//==============================================================
+
+async function removeInstance(userId, instanceId) {
+
+    const client = clients.get(instanceId);
+
+    if (client) {
+
+        await gracefulDestroy(client);
+
+        clients.delete(instanceId);
+
+    }
+
+    const session = sessions.get(userId);
+
+    if (session) {
+
+        session.instances.delete(instanceId);
+
+        if (session.activeId === instanceId) {
+
+            const restantes =
+
+                [...session.instances.keys()];
+
+            session.activeId =
+
+                restantes.length
+
+                    ? restantes[0]
+
+                    : null;
+
+        }
+
+    }
+
+    //----------------------------------------------------------
+    // BORRAR CARPETAS
+    //----------------------------------------------------------
+
+    const carpetas = [
+
+        path.join(
+
+            SESSIONS_DIR,
+
+            `session-${instanceId}`
+
+        ),
+
+        path.join(
+
+            CHROME_PROFILES,
+
+            instanceId
+
+        )
+
+    ];
+
+    for (const carpeta of carpetas) {
+
+        try {
+
+            if (fs.existsSync(carpeta)) {
+
+                fs.rmSync(
+
+                    carpeta,
+
+                    {
+
+                        recursive: true,
+
+                        force: true
+
+                    }
+
+                );
+
+            }
+
+        }
+
+        catch (err) {
+
+            console.warn(
+
+                `No pudo eliminarse ${carpeta}`
+
+            );
+
+        }
+
+    }
+
+    //----------------------------------------------------------
+    // PERSISTENCIA
+    //----------------------------------------------------------
+
+    try {
+
+        eliminarInstancia(
+
+            userId,
+
+            instanceId
+
+        );
+
+    }
+
+    catch (err) {
+
+        console.error(err);
+
+    }
+
+    emitInstancesUpdate(userId);
+
+    console.log(
+
+        `🗑️ Instancia eliminada ${instanceId}`
+
+    );
+
+}
+
+
+//==============================================================
+// RESTAURAR TODAS
+//==============================================================
+
+async function restaurarTodas(io) {
+
+    console.log(
+
+        '🔄 Restaurando sesiones...'
+
+    );
+
+    const usuarios =
+
+        obtenerTodosLosUsuarios();
+
+    for (const userId of usuarios) {
+
+        const instancias =
+
+            obtenerInstanciasPorUsuario(userId);
+
+        if (!sessions.has(userId)) {
+
+            sessions.set(
+
+                userId,
+
+                {
+
+                    activeId: null,
+
+                    instances: new Map()
+
+                }
+
+            );
+
+        }
+
+        const session =
+
+            sessions.get(userId);
+
+        for (const instancia of instancias) {
+
+            session.instances.set(
+
+                instancia.id,
+
+                {
+
+                    numero:
+
+                        instancia.numero || '',
+
+                    listo:
+
+                        instancia.listo || false,
+
+                    estado:
+
+                        instancia.estado ||
+
+                        getEstadoInstancia(instancia.id),
+
+                    client:
+
+                        null
+
+                }
+
+            );
+
+            if (!session.activeId) {
+
+                session.activeId =
+
+                    instancia.id;
+
+            }
+
+        }
+
+    }
+
+    //----------------------------------------------------------
+    // INICIAR TODAS
+    //----------------------------------------------------------
+
+    for (
+
+        const [
+
+            userId,
+
+            session
+
+        ] of sessions
+
+    ) {
+
+        for (
+
+            const instanceId of
+
+            session.instances.keys()
+
+        ) {
+
+            try {
+
+                await startSession(
+
+                    userId,
+
+                    io,
+
+                    instanceId
+
+                );
+
+            }
+
+            catch (err) {
+
+                console.error(
+
+                    `❌ Error restaurando ${instanceId}:`,
+
+                    err.message
+
+                );
+
+            }
+
+        }
+
+    }
+
+    console.log(
+
+        '✅ Restauración finalizada'
+
+    );
+
+}
+
+
+//==============================================================
+// SHUTDOWN
+//==============================================================
+
+async function shutdown() {
+
+    console.log(
+
+        '🛑 Cerrando Session Manager...'
+
+    );
+
+    for (
+
+        const client of clients.values()
+
+    ) {
+
+        try {
+
+            await gracefulDestroy(client);
+
+        }
+
+        catch (err) {}
+
+    }
+
+    clients.clear();
+
+    sessions.clear();
+
+    userSockets.clear();
+
+    console.log(
+
+        '✅ Session Manager detenido'
+
+    );
+
+}
+
+//==============================================================
+// INSTANCE IDS
 //==============================================================
 
 function getInstanceIds() {
 
-    const ids = [];
-
-    for (const [, userSession] of sessions) {
-
-        if (!userSession.instances) {
-
-            continue;
-
-        }
-
-        for (const [instanceId] of userSession.instances) {
-
-            ids.push(instanceId);
-
-        }
-
-    }
-
-    return ids;
+    return [...clients.keys()];
 
 }
 
+
+//==============================================================
+// COMPATIBILIDAD
+//==============================================================
+
+function guardarInstancia(
+
+    userId,
+
+    instanceId,
+
+    data
+
+) {
+
+    return guardarInstanciaPersistencia(
+
+        userId,
+
+        instanceId,
+
+        data
+
+    );
+
+}
+
+
+//==============================================================
+// EXPORTS
+//==============================================================
+
 module.exports = {
-    getUserSession, getUserInstances, getEstado,
-    getActiveInstanceId, setActiveInstance, getQrCode, getClient,
-    addSocket, removeSocket, emitQr, emitReady, emitInstancesUpdate,
-    startSession, removeInstance, restaurarTodas,
-    guardarInstancia, guardarInstanciaEnDisco, getInstanceIds,
+
+    // Sesiones
+    getUserSession,
+    getUserInstances,
+    getEstado,
+    getActiveInstanceId,
+    setActiveInstance,
+
+    // Clientes
+    getClient,
+    getQrCode,
+    getInstanceIds,
+
+    // Persistencia
+    guardarInstancia,
+    removeInstance,
+    restaurarTodas,
+
+    // Eventos
+    addSocket,
+    removeSocket,
+    emitQr,
+    emitReady,
+    emitInstancesUpdate,
+
+    // WhatsApp
+    startSession,
+
+    // Cierre
+    shutdown
+
 };
