@@ -5,49 +5,30 @@
  * MdI MultiWA
  * services/campaign-runner.js
  *
- * v4.0.0
- *
- * Runner único de campañas
+ * Runner de campañas
  *
  * RESPONSABILIDAD:
- *  • Procesar UN SOLO contacto por ejecución.
- *  • No maneja timers.
- *  • No maneja scheduler.
- *  • No maneja monitor.
- *  • No inicia campañas.
- *  • No detiene campañas.
+ *   - Procesar un único contacto por ejecución.
+ *   - Enviar mensaje.
+ *   - Actualizar estado.
+ *   - Devolver resultado.
  * =============================================================
  */
-
-//==================================================
-// DESARROLLO
-//==================================================
-
-const {
-
-    BYPASS_ANTIBAN
-
-} = require('../config/env');
 
 //==============================================================
 // DEPENDENCIAS
 //==============================================================
 
-const sessionManager =
-    require('./session-manager');
+const sessionManager = require('./session-manager');
 
-const antiBan =
-    require('../config/anti-baneo');
+const antiBan = require('../config/anti-baneo');
 
-const {
-
-    esBaja
-
-} = require('./bajas');
+const { esBaja } = require('./bajas');
 
 const {
 
     procesarSpintax,
+
     simularEscrituraHumana
 
 } = require('./formateo');
@@ -55,6 +36,7 @@ const {
 const {
 
     getEstadoInstancia,
+
     guardarEstadoSeguro
 
 } = require('../state/estado');
@@ -65,15 +47,15 @@ const {
 
 const RESULTADO = {
 
-    OK: 'OK',
+    OK: "OK",
 
-    PAUSA: 'PAUSA',
+    PAUSA: "PAUSA",
 
-    BAJA: 'BAJA',
+    BAJA: "BAJA",
 
-    FINALIZADA: 'FINALIZADA',
+    FINALIZADA: "FINALIZADA",
 
-    ERROR: 'ERROR'
+    ERROR: "ERROR"
 
 };
 
@@ -81,55 +63,109 @@ const RESULTADO = {
 // RUN
 //==============================================================
 
-async function run(instanceId) {
+async function run(instanceId){
 
+	//----------------------------------------------------------
+	// CLIENTE LISTO
+	//----------------------------------------------------------
+
+	if (!client.info || !client.info.wid) {
+
+   	 console.log("⏳ Cliente aún no terminó de iniciar.");
+
+    		return {
+
+       		 tipo: RESULTADO.PAUSA,
+
+        		pausa: 3000
+
+   	 };
+
+	}
+	
     //----------------------------------------------------------
-    // ESTADO
+    // Estado
     //----------------------------------------------------------
 
-    const estado =
-        getEstadoInstancia(instanceId);
+    const estado = getEstadoInstancia(instanceId);
 
-    if (!estado) {
+console.log("====================================");
+console.log("RUNNER");
+console.log("instance:", instanceId);
+console.log("actual:", estado.actual);
+console.log("total:", estado.total);
+console.log("contactos:", estado.contactosCargados?.length);
+
+if (estado.contactosCargados?.length) {
+    console.log("primer contacto:");
+    console.log(estado.contactosCargados[0]);
+}
+
+console.log("====================================");
+
+    if(!estado){
 
         return {
 
             tipo: RESULTADO.ERROR,
 
-            motivo: 'Estado inexistente'
+            motivo: "Estado inexistente"
 
         };
 
     }
 
     //----------------------------------------------------------
-    // CLIENTE
+    // Cliente
     //----------------------------------------------------------
 
-    const client =
-        sessionManager.getClient(instanceId);
+    const client = sessionManager.getClient(instanceId);
 
-    if (!client) {
+    if(!client){
 
         return {
 
             tipo: RESULTADO.ERROR,
 
-            motivo: 'Cliente WhatsApp no conectado'
+            motivo: "Cliente no conectado"
 
         };
 
     }
 
     //----------------------------------------------------------
-    // CAMPAÑA FINALIZADA
+    // Lista vacía
     //----------------------------------------------------------
 
-    if (
+    if(
 
-        estado.actual >= estado.total
+        !Array.isArray(estado.contactosCargados)
 
-    ) {
+        ||
+
+        estado.contactosCargados.length===0
+
+    ){
+
+        return {
+
+            tipo: RESULTADO.ERROR,
+
+            motivo:"No hay contactos"
+
+        };
+
+    }
+
+    //----------------------------------------------------------
+    // Campaña finalizada
+    //----------------------------------------------------------
+
+    if(
+
+        estado.actual >= estado.contactosCargados.length
+
+    ){
 
         estado.enviando = false;
 
@@ -146,32 +182,15 @@ async function run(instanceId) {
     }
 
     //----------------------------------------------------------
-    // CONTACTO ACTUAL
+    // Contacto actual
     //----------------------------------------------------------
 
     const contacto =
 
-        estado.contactosCargados[
+        estado.contactosCargados[estado.actual];
 
-            estado.actual
-
-        ];
-
-    if (!contacto) {
-
-        return {
-
-            tipo: RESULTADO.ERROR,
-
-            motivo: 'Contacto inexistente'
-
-        };
-
-    }
-
-    //----------------------------------------------------------
-    // PROCESAR CONTACTO
-    //----------------------------------------------------------
+console.log("Índice:", estado.actual);
+console.log("Contacto:", estado.contactosCargados[estado.actual]);
 
     return await procesarContacto(
 
@@ -201,19 +220,77 @@ async function procesarContacto(
 
     contacto
 
-) {
+){
+
+    console.log("=== procesarContacto ===");
 
     //----------------------------------------------------------
-    // BAJA
+    // Validar contacto
     //----------------------------------------------------------
 
-    if (
+    if(!contacto){
 
-        esBaja(contacto.numero)
+        console.log("❌ contacto null");
 
-    ) {
+        return {
 
-        contacto.estadoEnvio = 'baja';
+            tipo: RESULTADO.ERROR,
+
+            motivo: "Contacto inexistente"
+
+        };
+
+    }
+
+    console.log("✅ contacto OK");
+
+    //----------------------------------------------------------
+    // Número
+    //----------------------------------------------------------
+
+    const numero = String(
+
+        contacto.numero ||
+
+        contacto.NUMERO ||
+
+        ""
+
+    ).replace(/\D/g,"");
+
+    console.log("Número:", numero);
+
+    if(!numero){
+
+        console.log("❌ número inválido");
+
+        return marcarError(
+
+            instanceId,
+
+            estado,
+
+            contacto,
+
+            "Número inválido"
+
+        );
+
+    }
+
+    console.log("✅ número válido");
+
+    //----------------------------------------------------------
+    // Baja
+    //----------------------------------------------------------
+
+    console.log("Chequeando baja...");
+
+    if(esBaja(numero)){
+
+        console.log("⚠ Está en bajas");
+
+        contacto.estadoEnvio = "baja";
 
         contacto.fechaEnvio =
 
@@ -221,11 +298,7 @@ async function procesarContacto(
 
         estado.actual++;
 
-        guardarEstadoSeguro(
-
-            instanceId
-
-        );
+        guardarEstadoSeguro(instanceId);
 
         return {
 
@@ -235,15 +308,21 @@ async function procesarContacto(
 
     }
 
+    console.log("✅ No está en bajas");
+
     //----------------------------------------------------------
-    // HORARIO PERMITIDO
+    // Horario permitido
     //----------------------------------------------------------
 
-    if (
+    console.log("Chequeando horario...");
 
-        !antiBan.esHorarioValido()
+    const horarioOK = antiBan.esHorarioValido();
 
-    ) {
+    console.log("Horario:", horarioOK);
+
+    if(!horarioOK){
+
+        console.log("⏸ Bloqueado por horario");
 
         return {
 
@@ -251,37 +330,31 @@ async function procesarContacto(
 
             motivo:
 
-                antiBan.obtenerMotivoPausa(
-
-                    instanceId
-
-                ),
+                antiBan.obtenerMotivoPausa(instanceId),
 
             pausa:
 
-                antiBan.obtenerTiempoRestante(
-
-                    instanceId
-
-                ) * 1000
+                antiBan.obtenerTiempoRestante(instanceId) * 1000
 
         };
 
     }
 
+    console.log("✅ Horario permitido");
+
     //----------------------------------------------------------
-    // LÍMITES ANTIBAN
+    // Límites antiban
     //----------------------------------------------------------
 
-    if (
+    console.log("Chequeando límites...");
 
-        !antiBan.puedeEnviarMas(
+    const puedeEnviar = antiBan.puedeEnviarMas(instanceId);
 
-            instanceId
+    console.log("puedeEnviar =", puedeEnviar);
 
-        )
+    if(!puedeEnviar){
 
-    ) {
+        console.log("⏸ Límite antiban alcanzado");
 
         return {
 
@@ -289,49 +362,59 @@ async function procesarContacto(
 
             motivo:
 
-                antiBan.obtenerMotivoPausa(
-
-                    instanceId
-
-                ),
+                antiBan.obtenerMotivoPausa(instanceId),
 
             pausa:
 
-                antiBan.obtenerTiempoRestante(
-
-                    instanceId
-
-                ) * 1000
+                antiBan.obtenerTiempoRestante(instanceId) * 1000
 
         };
 
     }
 
+    console.log("✅ Límite OK");
+
     //----------------------------------------------------------
-    // ESTADO DEL CLIENTE
+    // Cliente conectado
     //----------------------------------------------------------
 
-    try {
+    console.log("ANTES getState");
 
-        const estadoWA =
+    try{
 
-            await client.getState();
+        console.log("typeof getState =", typeof client.getState);
 
-        if (
+        if(typeof client.getState==="function"){
 
-            estadoWA !== 'CONNECTED'
+            const estadoWA = await client.getState();
 
-        ) {
+            console.log("Estado WA =", estadoWA);
 
-            return {
+            if(
 
-                tipo: RESULTADO.ERROR,
+                estadoWA==="UNPAIRED" ||
 
-                motivo:
+                estadoWA==="UNPAIRED_IDLE" ||
 
-                    `WhatsApp ${estadoWA}`
+                estadoWA==="CONFLICT"
 
-            };
+            ){
+
+                console.log("❌ Estado WA inválido");
+
+                return {
+
+                    tipo: RESULTADO.ERROR,
+
+                    motivo:`WhatsApp ${estadoWA}`
+
+                };
+
+            }
+
+        }else{
+
+            console.log("⚠ client.getState NO existe");
 
         }
 
@@ -339,21 +422,21 @@ async function procesarContacto(
 
     catch(err){
 
-        return {
+        console.log("⚠ Error getState");
 
-            tipo: RESULTADO.ERROR,
-
-            motivo: err.message
-
-        };
+        console.log(err);
 
     }
 
+    console.log("DESPUÉS getState");
+
     //----------------------------------------------------------
-    // ENVIAR
+    // Enviar
     //----------------------------------------------------------
 
-    return await enviarTextoYMultimedia(
+    console.log("➡ Llamando enviarMensaje()");
+
+    return await enviarMensaje(
 
         instanceId,
 
@@ -361,17 +444,19 @@ async function procesarContacto(
 
         estado,
 
-        contacto
+        contacto,
+
+        numero
 
     );
 
 }
 
 //==============================================================
-// ENVIAR TEXTO + MULTIMEDIA
+// ENVIAR MENSAJE
 //==============================================================
 
-async function enviarTextoYMultimedia(
+async function enviarMensaje(
 
     instanceId,
 
@@ -379,83 +464,25 @@ async function enviarTextoYMultimedia(
 
     estado,
 
-    contacto
+    contacto,
 
-) {
+    numero
 
-    try {
+){
 
-        //------------------------------------------------------
-        // MENSAJES DISPONIBLES
-        //------------------------------------------------------
-
-        const mensajes =
-
-            (estado.mensajesGuardados || [])
-
-                .filter(Boolean);
-
-        if (
-
-            mensajes.length === 0
-
-        ) {
-
-            return {
-
-                tipo: RESULTADO.ERROR,
-
-                motivo: 'No hay mensajes cargados'
-
-            };
-
-        }
+    try{
 
         //------------------------------------------------------
-        // NÚMERO
+        // Obtener Chat
         //------------------------------------------------------
 
-        const numero =
+        console.log(`📤 Enviando a ${numero}...`);
 
-            String(
+        const chat = await client.getNumberId(numero);
 
-                contacto.numero ||
+        if(!chat){
 
-                contacto.NUMERO ||
-
-                ''
-
-            ).replace(/\D/g,'');
-
-        if (!numero) {
-
-            return {
-
-                tipo: RESULTADO.ERROR,
-
-                motivo:'Número inválido'
-
-            };
-
-        }
-
-        console.log(
-
-            `📤 Enviando a ${numero}...`
-
-        );
-
-        //------------------------------------------------------
-        // CHAT
-        //------------------------------------------------------
-
-        const chat =
-
-            await client.getNumberId(numero);
-
-        if (!chat) {
-
-            return actualizarEstadoError(
+            return marcarError(
 
                 instanceId,
 
@@ -463,9 +490,7 @@ async function enviarTextoYMultimedia(
 
                 contacto,
 
-                numero,
-
-                'Número inexistente'
+                "Número inexistente"
 
             );
 
@@ -477,36 +502,48 @@ async function enviarTextoYMultimedia(
 
             `${chat.user}@${chat.server}`;
 
-        console.log(
+        console.log(`✅ Chat ID: ${destino}`);
 
-            `✅ Chat ID: ${destino}`
+        //------------------------------------------------------
+        // Seleccionar mensaje
+        //------------------------------------------------------
+
+        const mensajes =
+
+            (estado.mensajesGuardados || [])
+
+            .filter(Boolean);
+
+        if(mensajes.length===0){
+
+            return {
+
+                tipo: RESULTADO.ERROR,
+
+                motivo:"No hay mensajes cargados"
+
+            };
+
+        }
+
+        const texto = procesarSpintax(
+
+            mensajes[
+
+                Math.floor(
+
+                    Math.random() *
+
+                    mensajes.length
+
+                )
+
+            ]
 
         );
 
         //------------------------------------------------------
-        // MENSAJE
-        //------------------------------------------------------
-
-        const texto =
-
-            procesarSpintax(
-
-                mensajes[
-
-                    Math.floor(
-
-                        Math.random() *
-
-                        mensajes.length
-
-                    )
-
-                ]
-
-            );
-
-        //------------------------------------------------------
-        // ESCRITURA HUMANA
+        // Simular escritura
         //------------------------------------------------------
 
         await simularEscrituraHumana(
@@ -520,48 +557,34 @@ async function enviarTextoYMultimedia(
         );
 
         //------------------------------------------------------
-        // ENVIAR TEXTO O IMAGEN
+        // Imagen
         //------------------------------------------------------
 
-        if (
+        if(estado.imagenGuardada){
 
-            estado.imagenGuardada
+            const fs = require("fs");
 
-        ) {
+            const path = require("path");
 
             const {
 
                 MessageMedia
 
-            } = require(
+            } = require("whatsapp-web.js");
 
-                'whatsapp-web.js'
+            const archivo = path.join(
+
+                __dirname,
+
+                "..",
+
+                "uploads",
+
+                estado.imagenGuardada
 
             );
 
-            const fs = require('fs');
-
-            const path = require('path');
-
-            const archivo =
-
-                path.join(
-
-                    __dirname,
-
-                    '..',
-
-                    'uploads',
-
-                    estado.imagenGuardada
-
-                );
-
-            if (
-
-                fs.existsSync(archivo)
-
-            ) {
+            if(fs.existsSync(archivo)){
 
                 const media =
 
@@ -587,7 +610,7 @@ async function enviarTextoYMultimedia(
 
             }
 
-            else {
+            else{
 
                 await client.sendMessage(
 
@@ -601,7 +624,7 @@ async function enviarTextoYMultimedia(
 
         }
 
-        else {
+        else{
 
             await client.sendMessage(
 
@@ -614,48 +637,34 @@ async function enviarTextoYMultimedia(
         }
 
         //------------------------------------------------------
-        // AUDIO (SI EXISTE)
+        // Audio opcional
         //------------------------------------------------------
 
-        if (
+        if(estado.audioGuardado){
 
-            estado.audioGuardado
+            const fs = require("fs");
 
-        ) {
+            const path = require("path");
 
             const {
 
                 MessageMedia
 
-            } = require(
+            } = require("whatsapp-web.js");
 
-                'whatsapp-web.js'
+            const archivo = path.join(
+
+                __dirname,
+
+                "..",
+
+                "uploads",
+
+                estado.audioGuardado
 
             );
 
-            const fs = require('fs');
-
-            const path = require('path');
-
-            const archivo =
-
-                path.join(
-
-                    __dirname,
-
-                    '..',
-
-                    'uploads',
-
-                    estado.audioGuardado
-
-                );
-
-            if (
-
-                fs.existsSync(archivo)
-
-            ) {
+            if(fs.existsSync(archivo)){
 
                 const media =
 
@@ -684,10 +693,10 @@ async function enviarTextoYMultimedia(
         }
 
         //------------------------------------------------------
-        // ACTUALIZAR ÉXITO
+        // OK
         //------------------------------------------------------
 
-        return actualizarEstadoExito(
+        return marcarExito(
 
             instanceId,
 
@@ -701,15 +710,13 @@ async function enviarTextoYMultimedia(
 
     catch(err){
 
-        return actualizarEstadoError(
+        return marcarError(
 
             instanceId,
 
             estado,
 
             contacto,
-
-            contacto.numero,
 
             err.message
 
@@ -720,10 +727,10 @@ async function enviarTextoYMultimedia(
 }
 
 //==============================================================
-// ACTUALIZAR ESTADO (ÉXITO)
+// MARCAR ÉXITO
 //==============================================================
 
-function actualizarEstadoExito(
+function marcarExito(
 
     instanceId,
 
@@ -731,37 +738,21 @@ function actualizarEstadoExito(
 
     contacto
 
-) {
+){
 
-    //----------------------------------------------------------
-    // CONTACTO
-    //----------------------------------------------------------
-
-    contacto.estadoEnvio = 'enviado';
+    contacto.estadoEnvio = "enviado";
 
     contacto.fechaEnvio =
 
         new Date().toISOString();
 
-    //----------------------------------------------------------
-    // CONTADORES
-    //----------------------------------------------------------
-
     estado.actual++;
 
     estado.enviadosOk++;
 
-    //----------------------------------------------------------
-    // BANDERAS
-    //----------------------------------------------------------
-
     estado.enviando = true;
 
     estado.campanaFinalizada = false;
-
-    //----------------------------------------------------------
-    // ANTIBAN
-    //----------------------------------------------------------
 
     antiBan.incrementarMensajesHoy(
 
@@ -775,10 +766,6 @@ function actualizarEstadoExito(
 
     );
 
-    //----------------------------------------------------------
-    // GUARDAR
-    //----------------------------------------------------------
-
     guardarEstadoSeguro(
 
         instanceId
@@ -787,13 +774,9 @@ function actualizarEstadoExito(
 
     console.log(
 
-        `✅ Enviado (${estado.actual}/${estado.total}) -> ${contacto.numero}`
+        `✅ Enviado (${estado.actual}/${estado.contactosCargados.length})`
 
     );
-
-    //----------------------------------------------------------
-    // RESPUESTA
-    //----------------------------------------------------------
 
     return {
 
@@ -814,10 +797,10 @@ function actualizarEstadoExito(
 }
 
 //==============================================================
-// ACTUALIZAR ESTADO (ERROR)
+// MARCAR ERROR
 //==============================================================
 
-function actualizarEstadoError(
+function marcarError(
 
     instanceId,
 
@@ -825,17 +808,11 @@ function actualizarEstadoError(
 
     contacto,
 
-    numero,
-
     motivo
 
-) {
+){
 
-    //----------------------------------------------------------
-    // CONTACTO
-    //----------------------------------------------------------
-
-    contacto.estadoEnvio = 'fallido';
+    contacto.estadoEnvio = "fallido";
 
     contacto.fechaEnvio =
 
@@ -843,9 +820,19 @@ function actualizarEstadoError(
 
     contacto.error = motivo;
 
-    //----------------------------------------------------------
-    // LISTA DE FALLIDOS
-    //----------------------------------------------------------
+    if(
+
+        !Array.isArray(
+
+            estado.fallidos
+
+        )
+
+    ){
+
+        estado.fallidos = [];
+
+    }
 
     estado.fallidos.push({
 
@@ -855,39 +842,35 @@ function actualizarEstadoError(
 
             contacto.NOMBRE ||
 
-            '',
+            "",
 
-        numero,
+        numero:
+
+            contacto.numero ||
+
+            contacto.NUMERO ||
+
+            "",
 
         motivo
 
     });
 
-    //----------------------------------------------------------
-    // CONTADORES
-    //----------------------------------------------------------
-
     estado.actual++;
 
-    //----------------------------------------------------------
-    // SI TERMINÓ LA LISTA
-    //----------------------------------------------------------
+    if(
 
-    if (
+        estado.actual >=
 
-        estado.actual >= estado.total
+        estado.contactosCargados.length
 
-    ) {
+    ){
 
         estado.enviando = false;
 
         estado.campanaFinalizada = true;
 
     }
-
-    //----------------------------------------------------------
-    // GUARDAR
-    //----------------------------------------------------------
 
     guardarEstadoSeguro(
 
@@ -897,21 +880,9 @@ function actualizarEstadoError(
 
     console.error(
 
-        `❌ Error (${estado.actual}/${estado.total}) -> ${numero}`
+        `❌ ${motivo}`
 
     );
-
-    console.error(
-
-        motivo
-
-    );
-
-    //----------------------------------------------------------
-    // IMPORTANTE:
-    // NO DETENER LA CAMPAÑA.
-    // CONTINUAR CON EL SIGUIENTE CONTACTO.
-    //----------------------------------------------------------
 
     return {
 
@@ -933,81 +904,31 @@ function actualizarEstadoError(
 // HELPERS
 //==============================================================
 
-function normalizarNumero(numero) {
+function normalizarNumero(numero){
 
-    if (
+    if(
 
         numero === null ||
 
         numero === undefined
 
-    ) {
+    ){
 
-        return '';
+        return "";
 
     }
 
     return String(numero)
 
-        .replace(/\D/g, '')
+        .replace(/\D/g,"")
 
         .trim();
 
 }
 
 //==============================================================
-// MARCAR CONTACTO
-//==============================================================
 
-function marcarContacto(
-
-    contacto,
-
-    estado,
-
-    motivo = ''
-
-) {
-
-    contacto.estadoEnvio = estado;
-
-    contacto.fechaEnvio =
-
-        new Date().toISOString();
-
-    if (motivo) {
-
-        contacto.error = motivo;
-
-    }
-
-}
-
-//==============================================================
-// OBTENER NOMBRE
-//==============================================================
-
-function obtenerNombre(contacto) {
-
-    return (
-
-        contacto.nombre ||
-
-        contacto.NOMBRE ||
-
-        contacto.Nombre ||
-
-        ''
-
-    );
-
-}
-
-//==============================================================
-// OBTENER NÚMERO
-//==============================================================
-
-function obtenerNumero(contacto) {
+function obtenerNumero(contacto){
 
     return normalizarNumero(
 
@@ -1017,21 +938,33 @@ function obtenerNumero(contacto) {
 
         contacto.Numero ||
 
-        ''
+        ""
 
     );
 
 }
 
 //==============================================================
-// SELECCIONAR MENSAJE ALEATORIO
+
+function obtenerNombre(contacto){
+
+    return (
+
+        contacto.nombre ||
+
+        contacto.NOMBRE ||
+
+        contacto.Nombre ||
+
+        ""
+
+    );
+
+}
+
 //==============================================================
 
-function obtenerMensajeAleatorio(
-
-    mensajes
-
-) {
+function obtenerMensajeAleatorio(mensajes){
 
     const lista =
 
@@ -1039,13 +972,9 @@ function obtenerMensajeAleatorio(
 
         .filter(Boolean);
 
-    if (
+    if(lista.length===0){
 
-        lista.length === 0
-
-    ) {
-
-        return '';
+        return "";
 
     }
 
@@ -1068,6 +997,32 @@ function obtenerMensajeAleatorio(
 }
 
 //==============================================================
+
+function marcarContacto(
+
+    contacto,
+
+    estado,
+
+    motivo=""
+
+){
+
+    contacto.estadoEnvio = estado;
+
+    contacto.fechaEnvio =
+
+        new Date().toISOString();
+
+    if(motivo){
+
+        contacto.error = motivo;
+
+    }
+
+}
+
+//==============================================================
 // EXPORTS
 //==============================================================
 
@@ -1077,7 +1032,6 @@ module.exports = {
 
     RESULTADO,
 
-    // Helpers exportados para testing
     normalizarNumero,
 
     obtenerNumero,

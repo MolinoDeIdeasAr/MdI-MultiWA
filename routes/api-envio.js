@@ -5,72 +5,127 @@
  * MdI MultiWA
  * routes/api-envio.js
  *
- * Versión : v5.0.0
+ * v3.0.0
  *
- * API de inicio de campañas.
+ * API DE ENVÍOS
  *
- * Esta ruta:
+ * RESPONSABILIDAD
  *
- * ✔ valida la instancia
- * ✔ prepara el estado
- * ✔ inicia el scheduler
- * ✔ responde al frontend
+ * • Guardar mensajes
+ * • Guardar imagen
+ * • Guardar audio
+ * • Iniciar campaña
+ * • Pausar campaña
+ * • Reanudar campaña
+ * • Detener campaña
  *
  * NO envía mensajes.
+ * NO ejecuta timers.
+ * NO contiene lógica antiban.
  * =============================================================
  */
 
-//==============================================================
-// DEPENDENCIAS
-//==============================================================
+const express = require('express');
+const router = express.Router();
 
-const express =
-
-    require('express');
-
-const router =
-
-    express.Router();
+const path = require('path');
+const multer = require('multer');
 
 const sessionManager =
-
     require('../services/session-manager');
 
 const scheduler =
-
     require('../services/campaign-scheduler');
+
+const {
+
+    getScheduler,
+
+    reiniciarScheduler
+
+} = require('../state/scheduler-state');
 
 const {
 
     getEstadoInstancia,
 
-    guardarEstadoSeguro
+    actualizarEstado,
 
-} = require(
+    guardarEstadoSeguro,
 
-    '../state/estado'
+    guardarMensajes,
 
-);
+    guardarImagen,
 
-const {
+    guardarAudio,
 
-    reiniciarScheduler,
+    eliminarImagen,
 
-    getScheduler
+    eliminarAudio,
 
-} = require(
+    resetearContadores
 
-    '../state/scheduler-state'
-
-);
+} = require('../state/estado');
 
 //==============================================================
-// POST /api/enviar
+// MULTER
+//==============================================================
+
+const storage = multer.diskStorage({
+
+    destination(req,file,cb){
+
+        cb(
+
+            null,
+
+            path.join(
+
+                __dirname,
+
+                '..',
+
+                'uploads'
+
+            )
+
+        );
+
+    },
+
+    filename(req,file,cb){
+
+        cb(
+
+            null,
+
+            `${Date.now()}_${file.originalname}`
+
+        );
+
+    }
+
+});
+
+const upload = multer({
+
+    storage,
+
+    limits:{
+
+        fileSize:50*1024*1024
+
+    }
+
+});
+
+//==============================================================
+// GUARDAR MENSAJES
 //==============================================================
 
 router.post(
 
-    '/enviar',
+    '/mensajes',
 
     async (
 
@@ -82,13 +137,17 @@ router.post(
 
         try{
 
-            //--------------------------------------------------
-            // INSTANCE ID
-            //--------------------------------------------------
+            const {
 
-            const instanceId =
+                instanceId,
 
-                req.body.instanceId;
+                mensajes
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // Validaciones
+            //--------------------------------------------------
 
             if(
 
@@ -100,14 +159,60 @@ router.post(
 
                     ok:false,
 
-                    error:'InstanceId inexistente'
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            if(
+
+                !Array.isArray(mensajes)
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'mensajes inválidos'
+
+                });
+
+            }
+
+            const lista =
+
+                mensajes
+
+                .map(
+
+                    m =>
+
+                    String(m || '').trim()
+
+                )
+
+                .filter(Boolean);
+
+            if(
+
+                lista.length===0
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Debe ingresar al menos un mensaje'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // CLIENTE
+            // Cliente
             //--------------------------------------------------
 
             const client =
@@ -135,7 +240,7 @@ router.post(
             }
 
             //--------------------------------------------------
-            // ESTADO
+            // Estado
             //--------------------------------------------------
 
             const estado =
@@ -163,12 +268,618 @@ router.post(
             }
 
             //--------------------------------------------------
-            // VALIDAR CONTACTOS
+            // Guardar
+            //--------------------------------------------------
+
+            guardarMensajes(
+
+                instanceId,
+
+                lista
+
+            );
+
+            console.log(
+
+                `💾 ${lista.length} mensajes guardados (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                total:lista.length
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// SUBIR IMAGEN
+//==============================================================
+
+router.post(
+
+    '/imagen',
+
+    upload.single('imagen'),
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            if(
+
+                !req.file
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'No se recibió ninguna imagen'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Estado
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Guardar imagen
+            //--------------------------------------------------
+
+            guardarImagen(
+
+                instanceId,
+
+                req.file.filename
+
+            );
+
+            console.log(
+
+                `🖼 Imagen guardada (${instanceId}) -> ${req.file.filename}`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                archivo:req.file.filename
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// ELIMINAR IMAGEN
+//==============================================================
+
+router.delete(
+
+    '/imagen',
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            eliminarImagen(
+
+                instanceId
+
+            );
+
+            console.log(
+
+                `🗑 Imagen eliminada (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// SUBIR AUDIO
+//==============================================================
+
+router.post(
+
+    '/audio',
+
+    upload.single('audio'),
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // Validaciones
             //--------------------------------------------------
 
             if(
 
-                !estado.contactosCargados ||
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            if(
+
+                !req.file
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'No se recibió ningún audio'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Estado
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Guardar audio
+            //--------------------------------------------------
+
+            guardarAudio(
+
+                instanceId,
+
+                req.file.filename
+
+            );
+
+            console.log(
+
+                `🎤 Audio guardado (${instanceId}) -> ${req.file.filename}`
+
+            );
+
+            return res.json({
+
+                ok:true,
+
+                archivo:req.file.filename
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// ELIMINAR AUDIO
+//==============================================================
+
+router.delete(
+
+    '/audio',
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // Validaciones
+            //--------------------------------------------------
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Eliminar audio
+            //--------------------------------------------------
+
+            eliminarAudio(
+
+                instanceId
+
+            );
+
+            console.log(
+
+                `🗑 Audio eliminado (${instanceId})`
+
+            );
+
+            return res.json({
+
+                ok:true
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// INICIAR CAMPAÑA
+//==============================================================
+
+router.post(
+
+    '/iniciar',
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // Validar instancia
+            //--------------------------------------------------
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Cliente
+            //--------------------------------------------------
+
+            const client =
+
+                sessionManager.getClient(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !client
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Cliente no conectado'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Esperar READY
+            //--------------------------------------------------
+
+            if(
+
+                !client.info ||
+
+                !client.info.wid
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'WhatsApp aún se está iniciando'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Estado
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Contactos
+            //--------------------------------------------------
+
+            if(
+
+                !Array.isArray(
+
+                    estado.contactosCargados
+
+                )
+
+                ||
 
                 estado.contactosCargados.length===0
 
@@ -185,7 +896,7 @@ router.post(
             }
 
             //--------------------------------------------------
-            // VALIDAR MENSAJES
+            // Mensajes
             //--------------------------------------------------
 
             const mensajes =
@@ -211,28 +922,34 @@ router.post(
             }
 
             //--------------------------------------------------
-            // REINICIAR CAMPAÑA
+            // Reiniciar contadores
             //--------------------------------------------------
 
-            estado.actual = 0;
+            resetearContadores(
 
-            estado.total =
+                instanceId
 
-                estado.contactosCargados.length;
-
-            estado.enviadosOk = 0;
-
-            estado.fallidos = [];
-
-            estado.enviando = true;
-
-            estado.pausado = false;
-
-            estado.campanaFinalizada = false;
+            );
 
             //--------------------------------------------------
-            // GUARDAR ESTADO
+            // Marcar campaña
             //--------------------------------------------------
+
+            actualizarEstado(
+
+                instanceId,
+
+                {
+
+                    enviando:true,
+
+                    pausado:false,
+
+                    campanaFinalizada:false
+
+                }
+
+            );
 
             guardarEstadoSeguro(
 
@@ -241,7 +958,7 @@ router.post(
             );
 
             //--------------------------------------------------
-            // REINICIAR SCHEDULER
+            // Reiniciar Scheduler
             //--------------------------------------------------
 
             reiniciarScheduler(
@@ -249,6 +966,38 @@ router.post(
                 instanceId
 
             );
+
+            //--------------------------------------------------
+            // Iniciar Scheduler
+            //--------------------------------------------------
+
+            const iniciado =
+
+                await scheduler.iniciar(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !iniciado
+
+            ){
+
+                return res.status(500).json({
+
+                    ok:false,
+
+                    error:'No se pudo iniciar el Scheduler'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Log
+            //--------------------------------------------------
 
             const sch =
 
@@ -290,9 +1039,9 @@ router.post(
 
             console.log(
 
-                'estado:',
+                'ready:',
 
-                !!estado
+                !!client.info
 
             );
 
@@ -308,7 +1057,7 @@ router.post(
 
                 'contactos:',
 
-                estado.total
+                estado.contactosCargados.length
 
             );
 
@@ -326,13 +1075,93 @@ router.post(
 
             );
 
+            console.log('');
+
             //--------------------------------------------------
-            // INICIAR SCHEDULER
+            // OK
             //--------------------------------------------------
 
-            const iniciado =
+            return res.json({
 
-                await scheduler.iniciar(
+                ok:true,
+
+                total:
+
+                    estado.contactosCargados.length
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// PAUSAR CAMPAÑA
+//==============================================================
+
+router.post(
+
+    '/pausar',
+
+    async (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.body;
+
+            //--------------------------------------------------
+            // Validar
+            //--------------------------------------------------
+
+            if(
+
+                !instanceId
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'instanceId requerido'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Estado
+            //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
 
                     instanceId
 
@@ -340,171 +1169,43 @@ router.post(
 
             if(
 
-                !iniciado
+                !estado
 
             ){
 
-                return res.status(409).json({
+                return res.status(400).json({
 
                     ok:false,
 
-                    error:'La campaña ya está en ejecución'
+                    error:'Estado inexistente'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // RESPUESTA
+            // Actualizar estado
             //--------------------------------------------------
 
-            return res.json({
-
-                ok:true,
-
-                mensaje:'Campaña iniciada correctamente.',
+            actualizarEstado(
 
                 instanceId,
 
-                monitor:
+                {
 
-                        `/monitor?instanceId=${instanceId}`
+                    enviando:false,
 
-            });
+                    pausado:true
 
-        }
-
-        //------------------------------------------------------
-        // ERROR GENERAL
-        //------------------------------------------------------
-
-        catch(err){
-
-            console.error('');
-
-            console.error(
-
-                '====================================='
-
-            );
-
-            console.error(
-
-                '❌ ERROR API ENVÍO'
-
-            );
-
-            console.error(
-
-                '====================================='
-
-            );
-
-            console.error(err);
-
-            console.error('');
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// POST /api/pausar
-//==============================================================
-
-router.post(
-
-    '/pausar',
-
-    async(
-
-        req,
-
-        res
-
-    )=>{
-
-        try{
-
-            const {
-
-                instanceId
-
-            } = req.body;
-
-            if(
-
-                !instanceId
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'InstanceId inexistente'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // ESTADO
-            //--------------------------------------------------
-
-            const estado =
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            if(
-
-                !estado
-
-            ){
-
-                return res.status(404).json({
-
-                    ok:false,
-
-                    error:'Estado inexistente'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // PAUSAR CAMPAÑA
-            //--------------------------------------------------
-
-            estado.enviando = false;
-
-            estado.pausado = true;
-
-            guardarEstadoSeguro(
-
-                instanceId
+                }
 
             );
 
             //--------------------------------------------------
-            // DETENER SCHEDULER
+            // Scheduler
             //--------------------------------------------------
 
-            scheduler.detener(
+            scheduler.pausar(
 
                 instanceId
 
@@ -518,21 +1219,13 @@ router.post(
 
             return res.json({
 
-                ok:true,
-
-                mensaje:'Campaña pausada correctamente.'
+                ok:true
 
             });
 
         }
 
         catch(err){
-
-            console.error(
-
-                '❌ Error pausando campaña'
-
-            );
 
             console.error(err);
 
@@ -551,20 +1244,20 @@ router.post(
 );
 
 //==============================================================
-// POST /api/pausar
+// REANUDAR CAMPAÑA
 //==============================================================
 
 router.post(
 
-    '/pausar',
+    '/reanudar',
 
-    async(
+    async (
 
         req,
 
         res
 
-    )=>{
+    ) => {
 
         try{
 
@@ -573,6 +1266,10 @@ router.post(
                 instanceId
 
             } = req.body;
+
+            //--------------------------------------------------
+            // Validar
+            //--------------------------------------------------
 
             if(
 
@@ -584,14 +1281,60 @@ router.post(
 
                     ok:false,
 
-                    error:'InstanceId inexistente'
+                    error:'instanceId requerido'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // ESTADO
+            // Cliente
+            //--------------------------------------------------
+
+            const client =
+
+                sessionManager.getClient(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !client
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Cliente no conectado'
+
+                });
+
+            }
+
+            if(
+
+                !client.info ||
+
+                !client.info.wid
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'WhatsApp aún no está listo'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Estado
             //--------------------------------------------------
 
             const estado =
@@ -608,7 +1351,7 @@ router.post(
 
             ){
 
-                return res.status(404).json({
+                return res.status(400).json({
 
                     ok:false,
 
@@ -619,177 +1362,25 @@ router.post(
             }
 
             //--------------------------------------------------
-            // PAUSAR CAMPAÑA
+            // Actualizar estado
             //--------------------------------------------------
 
-            estado.enviando = false;
+            actualizarEstado(
 
-            estado.pausado = true;
+                instanceId,
 
-            guardarEstadoSeguro(
+                {
 
-                instanceId
+                    enviando:true,
+
+                    pausado:false
+
+                }
 
             );
 
             //--------------------------------------------------
-            // DETENER SCHEDULER
-            //--------------------------------------------------
-
-            scheduler.detener(
-
-                instanceId
-
-            );
-
-            console.log(
-
-                `⏸ Campaña pausada (${instanceId})`
-
-            );
-
-            return res.json({
-
-                ok:true,
-
-                mensaje:'Campaña pausada correctamente.'
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(
-
-                '❌ Error pausando campaña'
-
-            );
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// POST /api/continuar
-//==============================================================
-
-router.post(
-
-    '/continuar',
-
-    async(
-
-        req,
-
-        res
-
-    )=>{
-
-        try{
-
-            const {
-
-                instanceId
-
-            } = req.body;
-
-            //--------------------------------------------------
-            // VALIDAR
-            //--------------------------------------------------
-
-            if(
-
-                !instanceId
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'InstanceId inexistente'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // ESTADO
-            //--------------------------------------------------
-
-            const estado =
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            if(
-
-                !estado
-
-            ){
-
-                return res.status(404).json({
-
-                    ok:false,
-
-                    error:'Estado inexistente'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // YA FINALIZÓ
-            //--------------------------------------------------
-
-            if(
-
-                estado.campanaFinalizada
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'La campaña ya finalizó'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // REANUDAR
-            //--------------------------------------------------
-
-            estado.enviando = true;
-
-            estado.pausado = false;
-
-            guardarEstadoSeguro(
-
-                instanceId
-
-            );
-
-            //--------------------------------------------------
-            // REINICIAR SCHEDULER
+            // Reiniciar Scheduler
             //--------------------------------------------------
 
             reiniciarScheduler(
@@ -812,11 +1403,11 @@ router.post(
 
             ){
 
-                return res.status(409).json({
+                return res.status(500).json({
 
                     ok:false,
 
-                    error:'No fue posible reiniciar el scheduler'
+                    error:'No se pudo reanudar la campaña'
 
                 });
 
@@ -830,21 +1421,13 @@ router.post(
 
             return res.json({
 
-                ok:true,
-
-                mensaje:'Campaña reanudada correctamente.'
+                ok:true
 
             });
 
         }
 
         catch(err){
-
-            console.error(
-
-                '❌ Error reanudando campaña'
-
-            );
 
             console.error(err);
 
@@ -863,20 +1446,20 @@ router.post(
 );
 
 //==============================================================
-// POST /api/detener
+// DETENER CAMPAÑA
 //==============================================================
 
 router.post(
 
     '/detener',
 
-    async(
+    async (
 
         req,
 
         res
 
-    )=>{
+    ) => {
 
         try{
 
@@ -887,7 +1470,7 @@ router.post(
             } = req.body;
 
             //--------------------------------------------------
-            // VALIDAR
+            // Validar
             //--------------------------------------------------
 
             if(
@@ -900,15 +1483,163 @@ router.post(
 
                     ok:false,
 
-                    error:'InstanceId inexistente'
+                    error:'instanceId requerido'
 
                 });
 
             }
 
             //--------------------------------------------------
-            // ESTADO
+            // Estado
             //--------------------------------------------------
+
+            const estado =
+
+                getEstadoInstancia(
+
+                    instanceId
+
+                );
+
+            if(
+
+                !estado
+
+            ){
+
+                return res.status(400).json({
+
+                    ok:false,
+
+                    error:'Estado inexistente'
+
+                });
+
+            }
+
+            //--------------------------------------------------
+            // Actualizar estado
+            //--------------------------------------------------
+
+            actualizarEstado(
+
+                instanceId,
+
+                {
+
+                    enviando:false,
+
+                    pausado:false,
+
+                    campanaFinalizada:true
+
+                }
+
+            );
+
+            guardarEstadoSeguro(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // Detener Scheduler
+            //--------------------------------------------------
+
+            scheduler.detener(
+
+                instanceId
+
+            );
+
+            //--------------------------------------------------
+            // Log
+            //--------------------------------------------------
+
+            console.log(
+
+                `⏹ Campaña detenida (${instanceId})`
+
+            );
+
+            console.log(
+
+                `Enviados: ${estado.enviadosOk}`
+
+            );
+
+            console.log(
+
+                `Procesados: ${estado.actual}/${estado.total}`
+
+            );
+
+            //--------------------------------------------------
+            // Respuesta
+            //--------------------------------------------------
+
+            return res.json({
+
+                ok:true,
+
+                enviados:
+
+                    estado.enviadosOk,
+
+                procesados:
+
+                    estado.actual,
+
+                total:
+
+                    estado.total
+
+            });
+
+        }
+
+        catch(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                ok:false,
+
+                error:err.message
+
+            });
+
+        }
+
+    }
+
+);
+
+//==============================================================
+// ESTADO DE CAMPAÑA
+//==============================================================
+
+router.get(
+
+    '/estado/:instanceId',
+
+    (
+
+        req,
+
+        res
+
+    ) => {
+
+        try{
+
+            const {
+
+                instanceId
+
+            } = req.params;
 
             const estado =
 
@@ -934,103 +1665,7 @@ router.post(
 
             }
 
-            //--------------------------------------------------
-            // DETENER CAMPAÑA
-            //--------------------------------------------------
-
-            estado.enviando = false;
-
-            estado.pausado = false;
-
-            estado.campanaFinalizada = true;
-
-            guardarEstadoSeguro(
-
-                instanceId
-
-            );
-
-            //--------------------------------------------------
-            // DETENER SCHEDULER
-            //--------------------------------------------------
-
-            scheduler.detener(
-
-                instanceId
-
-            );
-
-            console.log(
-
-                `🛑 Campaña detenida (${instanceId})`
-
-            );
-
-            return res.json({
-
-                ok:true,
-
-                mensaje:'Campaña detenida correctamente.'
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(
-
-                '❌ Error deteniendo campaña'
-
-            );
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// GET ESTADO
-//==============================================================
-
-router.get(
-
-    '/estado/:instanceId',
-
-    (
-
-        req,
-
-        res
-
-    )=>{
-
-        try{
-
-            const instanceId =
-
-                req.params.instanceId;
-
-            const estado =
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            const schedulerState =
+            const schedulerInfo =
 
                 getScheduler(
 
@@ -1044,19 +1679,13 @@ router.get(
 
                 estado,
 
-                scheduler:schedulerState
+                scheduler:schedulerInfo
 
             });
 
         }
 
         catch(err){
-
-            console.error(
-
-                '❌ Error obteniendo estado'
-
-            );
 
             console.error(err);
 
@@ -1075,7 +1704,7 @@ router.get(
 );
 
 //==============================================================
-// EXPORTS
+// EXPORT
 //==============================================================
 
 module.exports = router;

@@ -1,260 +1,943 @@
-/**
- * =============================================================
- *  MdI MultiWA — state/estado.js
- *  Versión : v1.37.0
- *  Fecha   : 2026-07-04
- * =============================================================
- *  CHANGELOG
- *  ---------
- *  v1.37.0 — Convertido en gestor central del estado.
- *             Agrega StateManager con Map en memoria como
- *             fuente de verdad. El JSON es solo backup/restore.
- *             Nuevas funciones: getEstadoInstancia(),
- *             actualizarEstado(), guardarEstadoSeguro().
- *             Checkpoint automático cada 30s durante campaña.
- *  v1.0    — Persistencia básica en JSON.
- * =============================================================
- */
 'use strict';
 
-const fs   = require('fs');
+/**
+ * =============================================================
+ * MdI MultiWA
+ * state/estado.js
+ *
+ * v3.0.0
+ *
+ * Estado único de cada instancia.
+ *
+ * RESPONSABILIDAD
+ *  • Mantener el estado en memoria.
+ *  • Persistir automáticamente en /data.
+ *  • No contiene lógica de campañas.
+ *  • No depende del scheduler.
+ * =============================================================
+ */
+
+const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR   = path.join(__dirname, '..', 'data');
-const ESTADO_DIR = path.join(DATA_DIR, 'estados');
+//==============================================================
+// DIRECTORIO
+//==============================================================
 
-if (!fs.existsSync(DATA_DIR))   fs.mkdirSync(DATA_DIR,   { recursive: true });
-if (!fs.existsSync(ESTADO_DIR)) fs.mkdirSync(ESTADO_DIR, { recursive: true });
+const DATA_DIR = path.join(
 
-// ─────────────────────────────────────────────
-//  FUENTE DE VERDAD EN MEMORIA
-//  instanceId → objeto estado (misma referencia siempre)
-// ─────────────────────────────────────────────
-const _estadosEnMemoria = new Map();
+    __dirname,
 
-// ─────────────────────────────────────────────
-//  ESTADO DEFAULT
-// ─────────────────────────────────────────────
+    '..',
+
+    'data'
+
+);
+
+fs.mkdirSync(
+
+    DATA_DIR,
+
+    {
+
+        recursive: true
+
+    }
+
+);
+
+//==============================================================
+// MEMORIA
+//==============================================================
+
+const estados = new Map();
+
+//==============================================================
+// HELPERS
+//==============================================================
+
+function getEstadoPath(instanceId) {
+
+    return path.join(
+
+        DATA_DIR,
+
+        `estado_${instanceId}.json`
+
+    );
+
+}
+
+//==============================================================
+// ESTADO POR DEFECTO
+//==============================================================
+
 function getDefaultEstado() {
+
     return {
-        listo            : false,
-        contactosCargados: [],
-        actual           : 0,
-        total            : 0,
-        enviadosOk       : 0,
-        fallidos         : [],
-        enviando         : false,
-        pausado          : false,
-        rubro            : '',
-        mensajesGuardados: ['', '', ''],
-        imagenGuardada   : null,
-        audioGuardado    : null,
-        conversaciones   : [],
+
+        //------------------------------------------------------
+        // WhatsApp
+        //------------------------------------------------------
+
+        listo: false,
+
+        numeroWhatsApp: '',
+
+        //------------------------------------------------------
+        // Campaña
+        //------------------------------------------------------
+
+        enviando: false,
+
+        pausado: false,
+
         campanaFinalizada: false,
-        numeroWhatsApp   : null
+
+        //------------------------------------------------------
+        // Contactos
+        //------------------------------------------------------
+
+        contactosCargados: [],
+
+        actual: 0,
+
+        total: 0,
+
+        enviadosOk: 0,
+
+        fallidos: [],
+
+        //------------------------------------------------------
+        // Contenido
+        //------------------------------------------------------
+
+        mensajesGuardados: [],
+
+        imagenGuardada: null,
+
+        audioGuardado: null,
+
+        //------------------------------------------------------
+        // Información adicional
+        //------------------------------------------------------
+
+        rubro: '',
+
+        usuario: '',
+
+        nombreInstancia: '',
+
+        //------------------------------------------------------
+        // Conversaciones
+        //------------------------------------------------------
+
+        conversaciones: {},
+
+        //------------------------------------------------------
+        // Estadísticas
+        //------------------------------------------------------
+
+        enviadosHoy: 0,
+
+        respuestasHoy: 0,
+
+        bajasHoy: 0,
+
+        //------------------------------------------------------
+        // Fechas
+        //------------------------------------------------------
+
+        fechaCreacion: new Date().toISOString(),
+
+        ultimaActualizacion: new Date().toISOString()
+
     };
+
 }
 
-// ─────────────────────────────────────────────
-//  getEstadoInstancia
-//  Devuelve SIEMPRE la misma referencia en memoria.
-//  Si no existe, la crea (carga del disco o default).
-//  → Esta es la fuente de verdad para todo el sistema.
-// ─────────────────────────────────────────────
+//==============================================================
+// OBTENER ESTADO
+//==============================================================
+
 function getEstadoInstancia(instanceId) {
-    if (!instanceId) return null;
 
-    if (_estadosEnMemoria.has(instanceId)) {
-        return _estadosEnMemoria.get(instanceId);
+    if (!instanceId) {
+
+        return null;
+
     }
 
-    // Primera vez: cargar del disco o crear default
-    const delDisco = _cargarDelDisco(instanceId);
-    const estado   = delDisco || getDefaultEstado();
-    _estadosEnMemoria.set(instanceId, estado);
+    //----------------------------------------------------------
+    // ¿Ya está en memoria?
+    //----------------------------------------------------------
+
+    if (estados.has(instanceId)) {
+
+        return estados.get(instanceId);
+
+    }
+
+    //----------------------------------------------------------
+    // Intentar cargar desde disco
+    //----------------------------------------------------------
+
+    const estado = cargarEstado(instanceId);
+
+    estados.set(
+
+        instanceId,
+
+        estado
+
+    );
+
     return estado;
+
 }
 
-// ─────────────────────────────────────────────
-//  actualizarEstado
-//  Modifica propiedades del estado en memoria
-//  SIN reemplazar la referencia.
-//  Esto garantiza que api-envio, monitor e inbound
-//  siempre vean el mismo objeto.
-// ─────────────────────────────────────────────
-function actualizarEstado(instanceId, cambios) {
-    const estado = getEstadoInstancia(instanceId);
-    if (!estado) return;
-    Object.assign(estado, cambios);
-}
+//==============================================================
+// REEMPLAZAR ESTADO COMPLETO
+//==============================================================
 
-// ─────────────────────────────────────────────
-//  guardarEstadoSeguro
-//  Persiste el estado actual al disco.
-//  Nunca reemplaza el objeto en memoria.
-// ─────────────────────────────────────────────
-function guardarEstadoSeguro(instanceId) {
-    if (!instanceId) return;
-    const estado = _estadosEnMemoria.get(instanceId);
-    if (!estado) return;
-    _persistirEnDisco(estado, instanceId);
-}
+function setEstadoInstancia(
 
-// ─────────────────────────────────────────────
-//  guardarEstado (compatibilidad hacia atrás)
-//  Acepta el objeto de estado como primer arg.
-//  Si ya existe en memoria, actualiza propiedades.
-//  Si no existe, lo registra.
-// ─────────────────────────────────────────────
-function guardarEstado(estado, instanceId) {
-    if (!instanceId || !estado) return;
+    instanceId,
 
-    if (_estadosEnMemoria.has(instanceId)) {
-        // Actualizar en-place para no romper referencias
-        const enMemoria = _estadosEnMemoria.get(instanceId);
-        Object.assign(enMemoria, estado);
-        _persistirEnDisco(enMemoria, instanceId);
-    } else {
-        _estadosEnMemoria.set(instanceId, estado);
-        _persistirEnDisco(estado, instanceId);
+    nuevoEstado
+
+) {
+
+    if (!instanceId) {
+
+        return null;
+
     }
+
+    const estado = {
+
+        ...getDefaultEstado(),
+
+        ...(nuevoEstado || {}),
+
+        ultimaActualizacion:
+
+            new Date().toISOString()
+
+    };
+
+    estados.set(
+
+        instanceId,
+
+        estado
+
+    );
+
+    guardarEstadoSeguro(instanceId);
+
+    return estado;
+
 }
 
-// ─────────────────────────────────────────────
-//  cargarEstado (compatibilidad hacia atrás)
-//  Retorna el estado en memoria si existe,
-//  sino lo carga del disco.
-// ─────────────────────────────────────────────
-function cargarEstado(instanceId) {
-    if (!instanceId) return null;
-    if (_estadosEnMemoria.has(instanceId)) {
-        return _estadosEnMemoria.get(instanceId);
+//==============================================================
+// ACTUALIZAR ESTADO
+//==============================================================
+
+function actualizarEstado(
+
+    instanceId,
+
+    cambios = {}
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    if (!estado) {
+
+        return null;
+
     }
-    const delDisco = _cargarDelDisco(instanceId);
-    if (delDisco) {
-        _estadosEnMemoria.set(instanceId, delDisco);
-    }
-    return delDisco;
+
+    Object.assign(
+
+        estado,
+
+        cambios
+
+    );
+
+    estado.ultimaActualizacion =
+
+        new Date().toISOString();
+
+    guardarEstadoSeguro(instanceId);
+
+    return estado;
+
 }
 
-// ─────────────────────────────────────────────
-//  PRIVADAS
-// ─────────────────────────────────────────────
-function _persistirEnDisco(estado, instanceId) {
+//==============================================================
+// EXISTE EN MEMORIA
+//==============================================================
+
+function existeEstado(
+
+    instanceId
+
+) {
+
+    return estados.has(instanceId);
+
+}
+
+//==============================================================
+// ELIMINAR DE MEMORIA
+//==============================================================
+
+function eliminarEstadoMemoria(
+
+    instanceId
+
+) {
+
+    estados.delete(instanceId);
+
+}
+
+//==============================================================
+// GUARDAR ESTADO
+//==============================================================
+
+function guardarEstado(
+
+    estado,
+
+    instanceId
+
+) {
+
+    if (
+
+        !instanceId ||
+
+        !estado
+
+    ) {
+
+        return false;
+
+    }
+
+    estado.ultimaActualizacion =
+
+        new Date().toISOString();
+
+    estados.set(
+
+        instanceId,
+
+        estado
+
+    );
+
+    return persistirEstado(
+
+        instanceId,
+
+        estado
+
+    );
+
+}
+
+//==============================================================
+// GUARDAR ESTADO (SEGURO)
+//==============================================================
+
+function guardarEstadoSeguro(
+
+    instanceId
+
+) {
+
+    const estado =
+
+        estados.get(instanceId);
+
+    if (!estado) {
+
+        return false;
+
+    }
+
+    estado.ultimaActualizacion =
+
+        new Date().toISOString();
+
+    return persistirEstado(
+
+        instanceId,
+
+        estado
+
+    );
+
+}
+
+//==============================================================
+// PERSISTIR EN DISCO
+//==============================================================
+
+function persistirEstado(
+
+    instanceId,
+
+    estado
+
+) {
+
     try {
-        const filePath = path.join(ESTADO_DIR, `${instanceId}.json`);
-        const completo = { ...getDefaultEstado(), ...estado };
-        fs.writeFileSync(filePath, JSON.stringify(completo, null, 2), 'utf8');
-    } catch (err) {
-        console.error(`❌ Error persistiendo estado ${instanceId}:`, err.message);
+
+        fs.writeFileSync(
+
+            getEstadoPath(instanceId),
+
+            JSON.stringify(
+
+                estado,
+
+                null,
+
+                4
+
+            ),
+
+            'utf8'
+
+        );
+
+        return true;
+
     }
+
+    catch (err) {
+
+        console.error(
+
+            `❌ Error guardando estado (${instanceId})`
+
+        );
+
+        console.error(err);
+
+        return false;
+
+    }
+
 }
 
-function _cargarDelDisco(instanceId) {
-    try {
-        const filePath = path.join(ESTADO_DIR, `${instanceId}.json`);
-        if (fs.existsSync(filePath)) {
-            return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        }
-    } catch (err) {
-        console.error(`❌ Error cargando estado ${instanceId}:`, err.message);
+//==============================================================
+// CARGAR DESDE DISCO
+//==============================================================
+
+function cargarEstado(
+
+    instanceId
+
+) {
+
+    const archivo =
+
+        getEstadoPath(instanceId);
+
+    if (
+
+        !fs.existsSync(archivo)
+
+    ) {
+
+        return getDefaultEstado();
+
     }
-    return null;
+
+    try {
+
+        const json =
+
+            JSON.parse(
+
+                fs.readFileSync(
+
+                    archivo,
+
+                    'utf8'
+
+                )
+
+            );
+
+        return {
+
+            ...getDefaultEstado(),
+
+            ...json
+
+        };
+
+    }
+
+    catch (err) {
+
+        console.error(
+
+            `⚠ Estado corrupto (${instanceId})`
+
+        );
+
+        console.error(err);
+
+        return getDefaultEstado();
+
+    }
+
 }
 
-// ─────────────────────────────────────────────
-//  CHECKPOINT AUTOMÁTICO
-//  Persiste todos los estados activos cada 30s.
-//  Evita pérdida de datos si el proceso muere.
-// ─────────────────────────────────────────────
-setInterval(() => {
-    for (const [instanceId, estado] of _estadosEnMemoria) {
-        if (estado.enviando) {
-            _persistirEnDisco(estado, instanceId);
-        }
-    }
-}, 30000);
+//==============================================================
+// EXISTE ARCHIVO
+//==============================================================
 
-// ─────────────────────────────────────────────
-//  HELPERS (compatibilidad con código existente)
-// ─────────────────────────────────────────────
-function guardarMensajes(instanceId, mensajes) {
-    try {
-        actualizarEstado(instanceId, { mensajesGuardados: mensajes });
+function existeEstadoEnDisco(
+
+    instanceId
+
+) {
+
+    return fs.existsSync(
+
+        getEstadoPath(instanceId)
+
+    );
+
+}
+
+//==============================================================
+// GUARDAR MENSAJES
+//==============================================================
+
+function guardarMensajes(
+
+    instanceId,
+
+    mensajes
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    estado.mensajesGuardados =
+
+        Array.isArray(mensajes)
+
+            ? mensajes.filter(Boolean)
+
+            : [];
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
+}
+
+//==============================================================
+// GUARDAR IMAGEN
+//==============================================================
+
+function guardarImagen(
+
+    instanceId,
+
+    nombreArchivo
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    if (
+
+        !nombreArchivo ||
+
+        typeof nombreArchivo !== 'string'
+
+    ) {
+
+        estado.imagenGuardada = null;
+
         guardarEstadoSeguro(instanceId);
-        return true;
-    } catch (err) {
-        console.error('❌ Error al guardar mensajes:', err.message);
-        return false;
-    }
-}
 
-function guardarImagen(instanceId, nombreArchivo) {
-    try {
-        actualizarEstado(instanceId, { imagenGuardada: nombreArchivo });
+        return estado;
+
+    }
+
+    //----------------------------------------------------------
+    // Verificar que exista en uploads
+    //----------------------------------------------------------
+
+    const archivo = path.join(
+
+        __dirname,
+
+        '..',
+
+        'uploads',
+
+        nombreArchivo
+
+    );
+
+    if (
+
+        !fs.existsSync(archivo)
+
+    ) {
+
+        console.warn(
+
+            `⚠ Imagen inexistente: ${nombreArchivo}`
+
+        );
+
+        estado.imagenGuardada = null;
+
         guardarEstadoSeguro(instanceId);
-        return true;
-    } catch (err) {
-        console.error('❌ Error al guardar imagen:', err.message);
-        return false;
+
+        return estado;
+
     }
+
+    estado.imagenGuardada =
+
+        nombreArchivo;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
 }
 
-function guardarAudio(instanceId, nombreArchivo) {
-    try {
-        actualizarEstado(instanceId, { audioGuardado: nombreArchivo });
+//==============================================================
+// GUARDAR AUDIO
+//==============================================================
+
+function guardarAudio(
+
+    instanceId,
+
+    nombreArchivo
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    if (
+
+        !nombreArchivo ||
+
+        typeof nombreArchivo !== 'string'
+
+    ) {
+
+        estado.audioGuardado = null;
+
         guardarEstadoSeguro(instanceId);
-        return true;
-    } catch (err) {
-        console.error('❌ Error al guardar audio:', err.message);
-        return false;
+
+        return estado;
+
     }
+
+    //----------------------------------------------------------
+    // Verificar que exista en uploads
+    //----------------------------------------------------------
+
+    const archivo = path.join(
+
+        __dirname,
+
+        '..',
+
+        'uploads',
+
+        nombreArchivo
+
+    );
+
+    if (
+
+        !fs.existsSync(archivo)
+
+    ) {
+
+        console.warn(
+
+            `⚠ Audio inexistente: ${nombreArchivo}`
+
+        );
+
+        estado.audioGuardado = null;
+
+        guardarEstadoSeguro(instanceId);
+
+        return estado;
+
+    }
+
+    estado.audioGuardado =
+
+        nombreArchivo;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
 }
 
-function eliminarImagen(instanceId) {
-    try {
-        const estado = getEstadoInstancia(instanceId);
-        if (estado && estado.imagenGuardada) {
-            const filePath = path.join(__dirname, '..', 'uploads', estado.imagenGuardada);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-            actualizarEstado(instanceId, { imagenGuardada: null });
-            guardarEstadoSeguro(instanceId);
-        }
-        return true;
-    } catch (err) {
-        console.error('❌ Error al eliminar imagen:', err.message);
-        return false;
-    }
+//==============================================================
+// ELIMINAR IMAGEN
+//==============================================================
+
+function eliminarImagen(
+
+    instanceId
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    estado.imagenGuardada = null;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
 }
 
-function eliminarAudio(instanceId) {
-    try {
-        const estado = getEstadoInstancia(instanceId);
-        if (estado && estado.audioGuardado) {
-            const filePath = path.join(__dirname, '..', 'uploads', estado.audioGuardado);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-            actualizarEstado(instanceId, { audioGuardado: null });
-            guardarEstadoSeguro(instanceId);
-        }
-        return true;
-    } catch (err) {
-        console.error('❌ Error al eliminar audio:', err.message);
-        return false;
-    }
+//==============================================================
+// ELIMINAR AUDIO
+//==============================================================
+
+function eliminarAudio(
+
+    instanceId
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    estado.audioGuardado = null;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
 }
+
+//==============================================================
+// LIMPIAR CAMPAÑA
+//==============================================================
+
+function limpiarCampania(
+
+    instanceId
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    //----------------------------------------------------------
+    // Contactos
+    //----------------------------------------------------------
+
+    estado.contactosCargados = [];
+
+    estado.actual = 0;
+
+    estado.total = 0;
+
+    estado.enviadosOk = 0;
+
+    estado.fallidos = [];
+
+    //----------------------------------------------------------
+    // Estado campaña
+    //----------------------------------------------------------
+
+    estado.enviando = false;
+
+    estado.pausado = false;
+
+    estado.campanaFinalizada = false;
+
+    //----------------------------------------------------------
+    // Contenido
+    //----------------------------------------------------------
+
+    estado.mensajesGuardados = [];
+
+    estado.imagenGuardada = null;
+
+    estado.audioGuardado = null;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
+}
+
+//==============================================================
+// RESETEAR CONTADORES
+//==============================================================
+
+function resetearContadores(
+
+    instanceId
+
+) {
+
+    const estado =
+
+        getEstadoInstancia(instanceId);
+
+    estado.actual = 0;
+
+    estado.total =
+
+        estado.contactosCargados.length;
+
+    estado.enviadosOk = 0;
+
+    estado.fallidos = [];
+
+    estado.enviando = false;
+
+    estado.pausado = false;
+
+    estado.campanaFinalizada = false;
+
+    guardarEstadoSeguro(
+
+        instanceId
+
+    );
+
+    return estado;
+
+}
+
+//==============================================================
+// LISTAR ESTADOS
+//==============================================================
+
+function getEstados() {
+
+    return estados;
+
+}
+
+//==============================================================
+// EXPORTS
+//==============================================================
 
 module.exports = {
-    // Nuevas (v1.37.0)
-    getEstadoInstancia,
-    actualizarEstado,
-    guardarEstadoSeguro,
-    // Compatibilidad (v1.0)
+
+    //----------------------------------------------------------
+    // Estado
+    //----------------------------------------------------------
+
     getDefaultEstado,
+
+    getEstadoInstancia,
+
+    setEstadoInstancia,
+
+    actualizarEstado,
+
+    existeEstado,
+
+    eliminarEstadoMemoria,
+
+    getEstados,
+
+    //----------------------------------------------------------
+    // Persistencia
+    //----------------------------------------------------------
+
     guardarEstado,
+
+    guardarEstadoSeguro,
+
     cargarEstado,
+
+    existeEstadoEnDisco,
+
+    //----------------------------------------------------------
+    // Campaña
+    //----------------------------------------------------------
+
+    limpiarCampania,
+
+    resetearContadores,
+
+    //----------------------------------------------------------
+    // Contenido
+    //----------------------------------------------------------
+
     guardarMensajes,
+
     guardarImagen,
+
     guardarAudio,
+
     eliminarImagen,
+
     eliminarAudio
+
 };

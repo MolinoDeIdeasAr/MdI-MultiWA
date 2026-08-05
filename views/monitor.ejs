@@ -765,7 +765,9 @@ async function actualizar(){
 
     try{
 
-        const r = await fetch('/progreso');
+        const r = await fetch(
+    `/api/monitor/progreso?instanceId=${instanceId}`
+);
 
         const data = await r.json();
 

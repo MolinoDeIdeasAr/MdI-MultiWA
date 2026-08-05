@@ -7,29 +7,26 @@
  *
  * Scheduler central de campañas
  *
- * Versión : v8.0.0
+ * Responsabilidad:
+ *  • Iniciar campañas
+ *  • Ejecutar runner
+ *  • Programar siguiente ejecución
+ *  • Manejar pausas antiban
+ *  • Finalizar campañas
  * =============================================================
  */
 
-const runner =
-    require('./campaign-runner');
+const runner = require('./campaign-runner');
 
 const {
-
     STATUS,
-
     getScheduler,
-
     actualizarScheduler,
-
     reiniciarScheduler
-
 } = require('../state/scheduler-state');
 
 const {
-
     guardarEstadoSeguro
-
 } = require('../state/estado');
 
 //==============================================================
@@ -48,201 +45,84 @@ const timers = new Map();
 // INIT
 //==============================================================
 
-function init(socketIO){
+function init(socketIO) {
 
     io = socketIO;
 
-    console.log(
-
-        '🗓️ Campaign Scheduler inicializado'
-
-    );
+    console.log('🗓️ Campaign Scheduler inicializado');
 
 }
 
-function getIO(){
+function getIO() {
 
     return io;
 
 }
 
 //==============================================================
-// PROGRAMAR
+// PROGRAMAR SIGUIENTE EJECUCIÓN
 //==============================================================
 
-function programar(
+function programar(instanceId, demora) {
 
-    instanceId,
+    if (timers.has(instanceId)) {
 
-    demora
-
-){
-
-    //----------------------------------------------------------
-    // Eliminar timer anterior
-    //----------------------------------------------------------
-
-    if(
-
-        timers.has(instanceId)
-
-    ){
-
-        clearTimeout(
-
-            timers.get(instanceId)
-
-        );
+        clearTimeout(timers.get(instanceId));
 
         timers.delete(instanceId);
 
     }
 
-    //----------------------------------------------------------
-    // Nuevo timer
-    //----------------------------------------------------------
+    const timer = setTimeout(async () => {
 
-    const timer = setTimeout(
+        timers.delete(instanceId);
 
-        ()=>{
+        await ejecutar(instanceId);
 
-            timers.delete(
+    }, demora);
 
-                instanceId
-
-            );
-
-            ejecutar(
-
-                instanceId
-
-            );
-
-        },
-
-        demora
-
-    );
-
-    timers.set(
-
-        instanceId,
-
-        timer
-
-    );
+    timers.set(instanceId, timer);
 
 }
 
 //==============================================================
-// INICIAR
+// INICIAR CAMPAÑA
 //==============================================================
 
-async function iniciar(
+async function iniciar(instanceId) {
 
-    instanceId
+    if (!instanceId) {
 
-){
-
-    //----------------------------------------------------------
-    // VALIDAR
-    //----------------------------------------------------------
-
-    if(
-
-        !instanceId
-
-    ){
-
-        console.error(
-
-            '❌ iniciar(): instanceId inválido'
-
-        );
+        console.error('❌ instanceId inválido');
 
         return false;
 
     }
 
-    //----------------------------------------------------------
-    // LIMPIAR TIMER ANTERIOR
-    //----------------------------------------------------------
+    if (timers.has(instanceId)) {
 
-    if(
-
-        timers.has(instanceId)
-
-    ){
-
-        clearTimeout(
-
-            timers.get(instanceId)
-
-        );
+        clearTimeout(timers.get(instanceId));
 
         timers.delete(instanceId);
 
     }
 
-    //----------------------------------------------------------
-    // REINICIAR SCHEDULER
-    //----------------------------------------------------------
+    reiniciarScheduler(instanceId);
 
-    reiniciarScheduler(
+    actualizarScheduler(instanceId, {
 
-        instanceId
+        status: STATUS.RUNNING,
+        iniciado: Date.now(),
+        finalizado: null,
+        pausaHasta: null,
+        proximoEnvio: Date.now(),
+        motivo: ''
 
-    );
+    });
 
-    //----------------------------------------------------------
-    // PASAR A RUNNING
-    //----------------------------------------------------------
+    console.log(`▶ Scheduler iniciado (${instanceId})`);
 
-    actualizarScheduler(
-
-        instanceId,
-
-        {
-
-            status:STATUS.RUNNING,
-
-            iniciado:Date.now(),
-
-            finalizado:null,
-
-            pausaHasta:null,
-
-            proximoEnvio:Date.now(),
-
-            motivo:''
-
-        }
-
-    );
-
-    console.log(
-
-        `▶ Scheduler iniciado (${instanceId})`
-
-    );
-
-    //----------------------------------------------------------
-    // PRIMERA EJECUCIÓN
-    //----------------------------------------------------------
-
-    setImmediate(
-
-        ()=>{
-
-            ejecutar(
-
-                instanceId
-
-            );
-
-        }
-
-    );
+    setImmediate(() => ejecutar(instanceId));
 
     return true;
 
@@ -252,67 +132,32 @@ async function iniciar(
 // EJECUTAR
 //==============================================================
 
-async function ejecutar(
-
-    instanceId
-
-){
+async function ejecutar(instanceId) {
 
     //----------------------------------------------------------
-    // OBTENER SCHEDULER
+    // Scheduler
     //----------------------------------------------------------
 
-    const scheduler =
+    const scheduler = getScheduler(instanceId);
 
-        getScheduler(
+    if (!scheduler) {
 
-            instanceId
-
-        );
-
-    if(
-
-        !scheduler
-
-    ){
-
-        console.error(
-
-            `❌ Scheduler inexistente (${instanceId})`
-
-        );
+        console.error(`❌ Scheduler inexistente (${instanceId})`);
 
         return;
 
     }
 
     //----------------------------------------------------------
-    // ¿SIGUE CORRIENDO?
+    // ¿Sigue corriendo?
     //----------------------------------------------------------
 
-    if(
+    if (scheduler.status !== STATUS.RUNNING) {
 
-        scheduler.status !== STATUS.RUNNING
+        if (timers.has(instanceId)) {
 
-    ){
-
-        if(
-
-            timers.has(instanceId)
-
-        ){
-
-            clearTimeout(
-
-                timers.get(instanceId)
-
-            );
-
-            timers.delete(
-
-                instanceId
-
-            );
+            clearTimeout(timers.get(instanceId));
+            timers.delete(instanceId);
 
         }
 
@@ -321,450 +166,191 @@ async function ejecutar(
     }
 
     //----------------------------------------------------------
-    // EJECUTAR RUNNER
+    // Ejecutar Runner
     //----------------------------------------------------------
 
-    console.log(
+    console.log(`🚀 Runner (${instanceId})`);
 
-        `🚀 Runner (${instanceId})`
+    let resultado;
 
-    );
+    try {
 
-    let resultado = null;
-
-    try{
-
-        resultado =
-
-            await runner.run(
-
-                instanceId
-
-            );
+        resultado = await runner.run(instanceId);
 
     }
 
-    catch(err){
+    catch (err) {
 
-        console.error(
-
-            `❌ Excepción Runner (${instanceId})`
-
-        );
-
+        console.error("❌ Error ejecutando runner");
         console.error(err);
 
-        actualizarScheduler(
+        actualizarScheduler(instanceId, {
 
-            instanceId,
+            status: STATUS.ERROR,
+            motivo: err.message,
+            finalizado: Date.now(),
+            proximoEnvio: null,
+            pausaHasta: null
 
-            {
-
-                status:STATUS.ERROR,
-
-                motivo:err.message,
-
-                finalizado:Date.now(),
-
-                proximoEnvio:null,
-
-                pausaHasta:null
-
-            }
-
-        );
-
-        if(
-
-            timers.has(instanceId)
-
-        ){
-
-            clearTimeout(
-
-                timers.get(instanceId)
-
-            );
-
-            timers.delete(
-
-                instanceId
-
-            );
-
-        }
+        });
 
         return;
 
     }
 
     //----------------------------------------------------------
-    // RESULTADO INVÁLIDO
+    // Validar respuesta
     //----------------------------------------------------------
 
-    if(
+    if (!resultado || !resultado.tipo) {
 
-        !resultado ||
+        actualizarScheduler(instanceId, {
 
-        !resultado.tipo
+            status: STATUS.ERROR,
+            motivo: "Runner devolvió resultado inválido",
+            finalizado: Date.now(),
+            proximoEnvio: null,
+            pausaHasta: null
 
-    ){
-
-        console.error(
-
-            `❌ Runner devolvió resultado inválido (${instanceId})`
-
-        );
-
-        actualizarScheduler(
-
-            instanceId,
-
-            {
-
-                status:STATUS.ERROR,
-
-                motivo:'Resultado inválido del Runner',
-
-                finalizado:Date.now(),
-
-                proximoEnvio:null,
-
-                pausaHasta:null
-
-            }
-
-        );
+        });
 
         return;
 
     }
 
-        //----------------------------------------------------------
+    //----------------------------------------------------------
     // ERROR
     //----------------------------------------------------------
 
-    if(
+    if (resultado.tipo === runner.RESULTADO.ERROR) {
 
-        resultado.tipo === runner.RESULTADO.ERROR
+        actualizarScheduler(instanceId, {
 
-    ){
+            status: STATUS.ERROR,
+            motivo: resultado.motivo || "Error",
+            finalizado: Date.now(),
+            proximoEnvio: null,
+            pausaHasta: null
 
-        actualizarScheduler(
+        });
 
-            instanceId,
+        return;
 
-            {
+    }
 
-                status:STATUS.ERROR,
+    //----------------------------------------------------------
+    // PAUSA
+    //----------------------------------------------------------
 
-                motivo:resultado.motivo || 'Error desconocido',
+    if (resultado.tipo === runner.RESULTADO.PAUSA) {
 
-                finalizado:Date.now(),
+        const pausa = resultado.pausa || 60000;
 
-                proximoEnvio:null,
+        actualizarScheduler(instanceId, {
 
-                pausaHasta:null
+            status: STATUS.WAITING_TIME,
+            pausaHasta: Date.now() + pausa,
+            proximoEnvio: Date.now() + pausa,
+            motivo: resultado.motivo || ""
 
-            }
+        });
 
-        );
+        programar(instanceId, pausa);
 
-        if(
+        return;
 
-            timers.has(instanceId)
+    }
 
-        ){
+    //----------------------------------------------------------
+    // BAJA
+    //----------------------------------------------------------
 
-            clearTimeout(
+    if (resultado.tipo === runner.RESULTADO.BAJA) {
 
-                timers.get(instanceId)
+        actualizarScheduler(instanceId, {
 
-            );
+            status: STATUS.RUNNING,
+            pausaHasta: null,
+            proximoEnvio: Date.now() + 100,
+            motivo: ""
 
-            timers.delete(
+        });
 
-                instanceId
+        programar(instanceId, 100);
 
-            );
+        return;
+
+    }
+
+    //----------------------------------------------------------
+    // OK
+    //----------------------------------------------------------
+
+    if (resultado.tipo === runner.RESULTADO.OK) {
+
+        guardarEstadoSeguro(instanceId);
+
+        const pausa = resultado.pausa || 1000;
+
+        actualizarScheduler(instanceId, {
+
+            status: STATUS.RUNNING,
+            pausaHasta: null,
+            proximoEnvio: Date.now() + pausa,
+            motivo: ""
+
+        });
+
+        programar(instanceId, pausa);
+
+        return;
+
+    }
+
+    //----------------------------------------------------------
+    // FINALIZADA
+    //----------------------------------------------------------
+
+    if (resultado.tipo === runner.RESULTADO.FINALIZADA) {
+
+        guardarEstadoSeguro(instanceId);
+
+        actualizarScheduler(instanceId, {
+
+            status: STATUS.FINISHED,
+            finalizado: Date.now(),
+            pausaHasta: null,
+            proximoEnvio: null,
+            motivo: ""
+
+        });
+
+        if (timers.has(instanceId)) {
+
+            clearTimeout(timers.get(instanceId));
+            timers.delete(instanceId);
 
         }
 
-        return;
-
-    }
-
-    //----------------------------------------------------------
-    // PAUSA ANTIBAN
-    //----------------------------------------------------------
-
-    if(
-
-        resultado.tipo === runner.RESULTADO.PAUSA
-
-    ){
-
-        const pausa =
-
-            resultado.pausa || 60000;
-
-        actualizarScheduler(
-
-            instanceId,
-
-            {
-
-                status:STATUS.WAITING_TIME,
-
-                pausaHasta:Date.now() + pausa,
-
-                proximoEnvio:Date.now() + pausa,
-
-                motivo:resultado.motivo || ''
-
-            }
-
-        );
-
-        programar(
-
-            instanceId,
-
-            pausa
-
-        );
+        console.log(`✅ Campaña finalizada (${instanceId})`);
 
         return;
 
     }
 
     //----------------------------------------------------------
-    // CONTACTO DADO DE BAJA
+    // Desconocido
     //----------------------------------------------------------
 
-    if(
-
-        resultado.tipo === runner.RESULTADO.BAJA
-
-    ){
-
-        actualizarScheduler(
-
-            instanceId,
-
-            {
-
-                status:STATUS.RUNNING,
-
-                pausaHasta:null,
-
-                proximoEnvio:Date.now() + 100,
-
-                motivo:''
-
-            }
-
-        );
-
-        programar(
-
-            instanceId,
-
-            100
-
-        );
-
-        return;
-
-    }
-
-    //----------------------------------------------------------
-    // MENSAJE ENVIADO OK
-    //----------------------------------------------------------
-
-    if(
-
-        resultado.tipo === runner.RESULTADO.OK
-
-    ){
-
-        const pausa =
-
-            resultado.pausa || 1000;
-
-        guardarEstadoSeguro(
-
-            instanceId
-
-        );
-
-        actualizarScheduler(
-
-            instanceId,
-
-            {
-
-                status:STATUS.RUNNING,
-
-                pausaHasta:null,
-
-                proximoEnvio:Date.now() + pausa,
-
-                motivo:''
-
-            }
-
-        );
-
-        programar(
-
-            instanceId,
-
-            pausa
-
-        );
-
-        return;
-
-    }
-
-        //----------------------------------------------------------
-    // CAMPAÑA FINALIZADA
-    //----------------------------------------------------------
-
-    if(
-
-        resultado.tipo === runner.RESULTADO.FINALIZADA
-
-    ){
-
-        guardarEstadoSeguro(
-
-            instanceId
-
-        );
-
-        actualizarScheduler(
-
-            instanceId,
-
-            {
-
-                status:STATUS.FINISHED,
-
-                finalizado:Date.now(),
-
-                pausaHasta:null,
-
-                proximoEnvio:null,
-
-                motivo:''
-
-            }
-
-        );
-
-        if(
-
-            timers.has(
-
-                instanceId
-
-            )
-
-        ){
-
-            clearTimeout(
-
-                timers.get(
-
-                    instanceId
-
-                )
-
-            );
-
-            timers.delete(
-
-                instanceId
-
-            );
-
-        }
-
-        console.log(
-
-            `✅ Campaña finalizada (${instanceId})`
-
-        );
-
-        return;
-
-    }
-
-    //----------------------------------------------------------
-    // RESULTADO DESCONOCIDO
-    //----------------------------------------------------------
-
-    console.warn(
-
-        `⚠ Resultado desconocido (${instanceId})`
-
-    );
-
-    console.warn(
-
-        resultado
-
-    );
-
-    actualizarScheduler(
-
-        instanceId,
-
-        {
-
-            status:STATUS.ERROR,
-
-            motivo:'Resultado desconocido',
-
-            finalizado:Date.now(),
-
-            pausaHasta:null,
-
-            proximoEnvio:null
-
-        }
-
-    );
-
-    if(
-
-        timers.has(
-
-            instanceId
-
-        )
-
-    ){
-
-        clearTimeout(
-
-            timers.get(
-
-                instanceId
-
-            )
-
-        );
-
-        timers.delete(
-
-            instanceId
-
-        );
-
-    }
+    actualizarScheduler(instanceId, {
+
+        status: STATUS.ERROR,
+        motivo: "Resultado desconocido",
+        finalizado: Date.now(),
+        proximoEnvio: null,
+        pausaHasta: null
+
+    });
 
 }
 
@@ -772,65 +358,27 @@ async function ejecutar(
 // DETENER
 //==============================================================
 
-function detener(
+function detener(instanceId) {
 
-    instanceId
+    if (timers.has(instanceId)) {
 
-){
+        clearTimeout(timers.get(instanceId));
 
-    if(
-
-        timers.has(
-
-            instanceId
-
-        )
-
-    ){
-
-        clearTimeout(
-
-            timers.get(
-
-                instanceId
-
-            )
-
-        );
-
-        timers.delete(
-
-            instanceId
-
-        );
+        timers.delete(instanceId);
 
     }
 
-    actualizarScheduler(
+    actualizarScheduler(instanceId, {
 
-        instanceId,
+        status: STATUS.STOPPED,
+        finalizado: Date.now(),
+        pausaHasta: null,
+        proximoEnvio: null,
+        motivo: "Detenido por el usuario"
 
-        {
+    });
 
-            status:STATUS.STOPPED,
-
-            finalizado:Date.now(),
-
-            pausaHasta:null,
-
-            proximoEnvio:null,
-
-            motivo:'Detenido por el usuario'
-
-        }
-
-    );
-
-    console.log(
-
-        `🛑 Scheduler detenido (${instanceId})`
-
-    );
+    console.log(`🛑 Scheduler detenido (${instanceId})`);
 
 }
 
@@ -838,44 +386,28 @@ function detener(
 // RESTAURAR CAMPAÑAS
 //==============================================================
 
-function restaurarCampañas(){
+function restaurarCampañas() {
 
-    console.log(
-
-        '🔄 Restaurando campañas...'
-
-    );
+    console.log("🔄 Restaurando campañas...");
 
     //----------------------------------------------------------
-    // Limpiar timers pendientes
+    // Cancelar cualquier timer pendiente
     //----------------------------------------------------------
 
-    for(
+    for (const timer of timers.values()) {
 
-        const timer of timers.values()
-
-    ){
-
-        clearTimeout(
-
-            timer
-
-        );
+        clearTimeout(timer);
 
     }
 
     timers.clear();
 
     //----------------------------------------------------------
-    // En v8 NO se restauran campañas automáticamente.
+    // En la v8 las campañas NO se restauran automáticamente.
     // Solamente se restauran las sesiones de WhatsApp.
     //----------------------------------------------------------
 
-    console.log(
-
-        '✅ Scheduler limpio'
-
-    );
+    console.log("✅ Scheduler limpio");
 
 }
 
@@ -883,39 +415,23 @@ function restaurarCampañas(){
 // SHUTDOWN
 //==============================================================
 
-async function shutdown(){
+async function shutdown() {
 
-    console.log(
-
-        '🛑 Cerrando Campaign Scheduler...'
-
-    );
+    console.log("🛑 Cerrando Campaign Scheduler...");
 
     //----------------------------------------------------------
     // Cancelar timers
     //----------------------------------------------------------
 
-    for(
+    for (const timer of timers.values()) {
 
-        const timer of timers.values()
-
-    ){
-
-        clearTimeout(
-
-            timer
-
-        );
+        clearTimeout(timer);
 
     }
 
     timers.clear();
 
-    console.log(
-
-        '✅ Campaign Scheduler detenido'
-
-    );
+    console.log("✅ Campaign Scheduler detenido");
 
 }
 
@@ -938,3 +454,4 @@ module.exports = {
     shutdown
 
 };
+

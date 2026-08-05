@@ -53,6 +53,9 @@ const apiEnvioRoutes =
 const apiMensajesRoutes =
     require('./routes/api-mensajes');
 
+const apiMonitorRoutes =
+    require('./routes/api-monitor');
+
 
 //==============================================================
 // EXPRESS
@@ -167,50 +170,34 @@ console.log(
 //==============================================================
 
 app.use(
-
     '/',
-
     authRoutes
-
 );
 
 app.use(
-
     '/api/carga',
-
     apiCargaRoutes
-
 );
 
 app.use(
-
     '/api/envio',
-
     apiEnvioRoutes
-
 );
 
 app.use(
-
     '/api/mensajes',
-
     apiMensajesRoutes
-
 );
 
 app.use(
+    '/api/monitor',
+    apiMonitorRoutes
+);
 
+app.use(
     '/',
-
     viewsRoutes
-
 );
-
-app.use(
-    '/uploads',
-    express.static(path.join(__dirname, 'uploads'))
-);
-
 
 //==============================================================
 // RESTAURAR SESIONES Y CAMPAÑAS

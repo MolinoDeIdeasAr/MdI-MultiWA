@@ -26,6 +26,7 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
+  console.log("ENTRO A LOGIN");
     const { username, password } = req.body;
     const user = users.find(u => u.username === username);
     if (!user || !bcrypt.compareSync(password, user.password)) {
