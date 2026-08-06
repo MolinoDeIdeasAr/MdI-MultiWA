@@ -384,6 +384,24 @@ async function startSession(
 
     }
 
+guardarInstancia(
+
+    userId,
+
+    {
+
+        id: instanceId,
+
+        numero: '',
+
+        listo: false,
+
+        estado: getEstadoInstancia(instanceId)
+
+    }
+
+);
+
     //----------------------------------------------------------
     // Si ya existe un cliente destruirlo
     //----------------------------------------------------------
@@ -604,7 +622,7 @@ async function startSession(
             // Persistir instancia
             //--------------------------------------------------
 
-            guardarInstanciaPersistencia(
+            guardarInstancia(
 
                 userId,
 
@@ -786,13 +804,19 @@ async function startSession(
 
     try {
 
-        await client.initialize();
+    //TEMPORAL INI
 
-        console.log(
+    console.log("1 - Antes initialize");
 
-            `🚀 initialize() ejecutado (${instanceId})`
+const p = client.initialize();
 
-        );
+console.log("2 - initialize() llamado");
+
+await p;
+
+console.log("3 - initialize() terminó");
+
+    //TEMPORAL FIN
 
     }
 

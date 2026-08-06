@@ -1,0 +1,383 @@
+=========================================
+MdI MultiWA Doctor
+=========================================
+
+Fecha: 6/8/2026, 05:07:33
+
+Archivos analizados: 44
+OK: 44
+Errores: 28
+Warnings: 15
+
+=============== ERRORES ===============
+
+{
+  "tipo": "IMPORT",
+  "archivo": "services\\gemini-ia.js",
+  "modulo": "./ai/ai-engine",
+  "linea": 9,
+  "mensaje": "Archivo inexistente"
+}
+
+{
+  "tipo": "IMPORT",
+  "archivo": "tools\\doctor.js",
+  "modulo": "...",
+  "linea": 915,
+  "mensaje": "Archivo inexistente"
+}
+
+{
+  "tipo": "IMPORT",
+  "archivo": "_backups\\campaign-runner-old.js",
+  "modulo": "./session-manager",
+  "linea": 27,
+  "mensaje": "Archivo inexistente"
+}
+
+{
+  "tipo": "IMPORT",
+  "archivo": "_backups\\campaign-runner-old.js",
+  "modulo": "./bajas",
+  "linea": 36,
+  "mensaje": "Archivo inexistente"
+}
+
+{
+  "tipo": "IMPORT",
+  "archivo": "_backups\\campaign-runner-old.js",
+  "modulo": "./formateo",
+  "linea": 43,
+  "mensaje": "Archivo inexistente"
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "index.js",
+  "modulo": "routes\\auth.js",
+  "funcion": "router: authRoutes",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\api-carga.js",
+  "modulo": "state\\estado.js",
+  "funcion": "guardarEstado",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\api-carga.js",
+  "modulo": "state\\estado.js",
+  "funcion": "getDefaultEstado",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\api-envio.js",
+  "modulo": "state\\scheduler-state.js",
+  "funcion": "getScheduler",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\api-envio.js",
+  "modulo": "state\\estado.js",
+  "funcion": "guardarMensajes",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\api-mensajes.js",
+  "modulo": "state\\estado.js",
+  "funcion": "guardarEstado",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "instanceId } = req.body;\n        const userId = req.session.userId;\n        if (!instanceId) return res.redirect('/');\n        sessionManager.setActiveInstance(userId",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "instanceId);\n        // FIX: redirigir a la página desde donde vino si está disponible\n        const referer = req.headers.referer || '/';\n        res.redirect(referer.includes('monitor') ? '/monitor' : '/');\n    } catch (error) {\n        console.error('Error en POST /seleccionar-instancia:'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "error);\n        res.status(500).send('Error al seleccionar instancia');\n    }\n});\n\n// ─────────────────────────────────────────────\n//  POST /nueva-instancia\n// ─────────────────────────────────────────────\nrouter.post('/nueva-instancia'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "async (req",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "res) => {\n    try {\n        const userId = req.session.userId;\n        const io = req.app.get('io');\n        const uniqueId = `inst_${userId}_${Date.now()}_${Math.random().toString(36).substring(2",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "6)}`;\n\n        // FIX: iniciar en background y setear como activa para que /qr muestre su QR\n        sessionManager.startSession(userId",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "io",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "uniqueId).catch(e => {\n            console.error('Error iniciando sesión:'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "e.message);\n        });\n\n        // Pequeña espera para que la instancia quede registrada en memoria\n        await new Promise(r => setTimeout(r",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "300));\n        sessionManager.setActiveInstance(userId",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "uniqueId);\n\n        res.redirect('/qr');\n    } catch (error) {\n        console.error('Error en POST /nueva-instancia:'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "error);\n        res.status(500).send('Error al crear instancia');\n    }\n});\n\n// ─────────────────────────────────────────────\n//  GET /conversaciones\n// ─────────────────────────────────────────────\nrouter.get('/conversaciones'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "async (req",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "res) => {\n    try {\n        const userId = req.session.userId;\n        const activeId = sessionManager.getActiveInstanceId(userId);\n        let conversaciones = [];\n\n        // Leer conversaciones del estado de la instancia activa\n        if (activeId) {\n            const s = sessionManager.getUserSession(userId);\n            if (s) {\n                const inst = s.instances.get(activeId);\n                if (inst && inst.estado && inst.estado.conversaciones) {\n                    conversaciones = inst.estado.conversaciones;\n                } else {\n                    // Intentar cargar desde disco\n                    const estadoDisco = cargarEstado(activeId);\n                    if (estadoDisco && estadoDisco.conversaciones) {\n                        conversaciones = estadoDisco.conversaciones;\n                    }\n                }\n            }\n        }\n\n        res.render('conversaciones'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "{ conversaciones });\n    } catch (error) {\n        console.error('Error en GET /conversaciones:'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "error);\n        res.status(500).send('Error interno del servidor');\n    }\n});\n\n// ─────────────────────────────────────────────\n//  POST /borrar-todas-conversaciones\n// ─────────────────────────────────────────────\nrouter.post('/borrar-todas-conversaciones'",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "async (req",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "res) => {\n    try {\n        const userId = req.session.userId;\n        const s = sessionManager.getUserSession(userId);\n        if (s) {\n            for (const [instanceId",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "routes\\views.js",
+  "modulo": "state\\estado.js",
+  "funcion": "inst] of s.instances) {\n                if (inst.estado) {\n                    inst.estado.conversaciones = [];\n                    const { guardarEstado",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "services\\campaign-scheduler.js",
+  "modulo": "state\\scheduler-state.js",
+  "funcion": "STATUS",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "services\\campaign-scheduler.js",
+  "modulo": "state\\scheduler-state.js",
+  "funcion": "getScheduler",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+{
+  "tipo": "EXPORT",
+  "archivo": "services\\campaign-scheduler.js",
+  "modulo": "state\\scheduler-state.js",
+  "funcion": "actualizarScheduler",
+  "mensaje": "Importa una función que no está exportada."
+}
+
+============== WARNINGS ===============
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\crm-manager.js",
+  "linea": 230,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\instancias-persistencia.js",
+  "linea": 23,
+  "texto": "todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\instancias-persistencia.js",
+  "linea": 24,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\instancias-persistencia.js",
+  "linea": 97,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\session-manager.js",
+  "linea": 53,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\session-manager.js",
+  "linea": 925,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\socket-service.js",
+  "linea": 161,
+  "texto": "TODO"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "services\\socket-service.js",
+  "linea": 164,
+  "texto": "Todo"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "state\\scheduler-state.js",
+  "linea": 587,
+  "texto": "TODO"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2379,
+  "texto": "TODO"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2379,
+  "texto": "FIXME"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2379,
+  "texto": "HACK"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2386,
+  "texto": "TODO"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2386,
+  "texto": "FIXME"
+}
+
+{
+  "tipo": "PENDIENTE",
+  "archivo": "tools\\doctor.js",
+  "linea": 2386,
+  "texto": "HACK"
+}

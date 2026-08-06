@@ -480,6 +480,90 @@ function cargarEstado(
 
             );
 
+//------------------------------------------------------
+// Verificar imagen
+//------------------------------------------------------
+
+if (
+
+    json.imagenGuardada
+
+) {
+
+    const nombreImagen =
+
+        typeof json.imagenGuardada === 'string'
+
+            ? json.imagenGuardada
+
+            : json.imagenGuardada.archivo;
+
+    const rutaImagen = path.join(
+
+        __dirname,
+
+        '..',
+
+        'uploads',
+
+        nombreImagen
+
+    );
+
+    if (
+
+        !fs.existsSync(rutaImagen)
+
+    ) {
+
+        json.imagenGuardada = null;
+
+    }
+
+}
+
+//------------------------------------------------------
+// Verificar audio
+//------------------------------------------------------
+
+if (
+
+    json.audioGuardado
+
+) {
+
+    const nombreAudio =
+
+        typeof json.audioGuardado === 'string'
+
+            ? json.audioGuardado
+
+            : json.audioGuardado.archivo;
+
+    const rutaAudio = path.join(
+
+        __dirname,
+
+        '..',
+
+        'uploads',
+
+        nombreAudio
+
+    );
+
+    if (
+
+        !fs.existsSync(rutaAudio)
+
+    ) {
+
+        json.audioGuardado = null;
+
+    }
+
+}
+
         return {
 
             ...getDefaultEstado(),
@@ -626,9 +710,13 @@ function guardarImagen(
 
     }
 
-    estado.imagenGuardada =
+estado.imagenGuardada = {
 
-        nombreArchivo;
+    archivo: nombreArchivo,
+
+    fecha: Date.now()
+
+};
 
     guardarEstadoSeguro(
 
@@ -708,9 +796,13 @@ function guardarAudio(
 
     }
 
-    estado.audioGuardado =
+estado.audioGuardado = {
 
-        nombreArchivo;
+    archivo: nombreArchivo,
+
+    fecha: Date.now()
+
+};
 
     guardarEstadoSeguro(
 
@@ -822,6 +914,8 @@ function limpiarCampania(
 
     estado.audioGuardado = null;
 
+    estado.conversaciones = {};
+
     guardarEstadoSeguro(
 
         instanceId
@@ -873,6 +967,34 @@ function resetearContadores(
 }
 
 //==============================================================
+// GET IMAGEN
+//==============================================================
+
+function getImagen(instanceId){
+
+    return getEstadoInstancia(
+
+        instanceId
+
+    )?.imagenGuardada || null;
+
+}
+
+//==============================================================
+// GET AUDIO
+//==============================================================
+
+function getAudio(instanceId){
+
+    return getEstadoInstancia(
+
+        instanceId
+
+    )?.audioGuardado || null;
+
+}
+
+//==============================================================
 // LISTAR ESTADOS
 //==============================================================
 
@@ -905,6 +1027,10 @@ module.exports = {
     eliminarEstadoMemoria,
 
     getEstados,
+
+    getImagen,
+
+    getAudio,
 
     //----------------------------------------------------------
     // Persistencia

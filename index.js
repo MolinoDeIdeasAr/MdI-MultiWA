@@ -164,6 +164,31 @@ console.log(
 
 );
 
+//==============================================================
+// SOCKET.IO
+//==============================================================
+
+io.on('connection', socket => {
+
+    console.log('🔌 Socket conectado:', socket.id);
+
+    socket.on('join', userId => {
+
+        console.log('👤 JOIN:', userId);
+
+        sessionManager.registerSocket(userId, socket);
+
+    });
+
+    socket.on('disconnect', () => {
+
+        console.log('❌ Socket desconectado');
+
+        sessionManager.unregisterSocket(socket);
+
+    });
+
+});
 
 //==============================================================
 // RUTAS
