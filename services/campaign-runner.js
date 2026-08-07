@@ -7,11 +7,23 @@
  *
  * Runner de campañas
  *
+ * v1.1.0
+ *
  * RESPONSABILIDAD:
  *   - Procesar un único contacto por ejecución.
  *   - Enviar mensaje.
  *   - Actualizar estado.
  *   - Devolver resultado.
+ *
+ * CHANGELOG v1.1.0:
+ *  • FIX CRÍTICO: run() usaba la variable "client" en el chequeo
+ *    "¿cliente listo?" ANTES de la línea que la declaraba
+ *    (const client = sessionManager.getClient(instanceId), 50
+ *    líneas más abajo). Por la zona muerta temporal de const/let
+ *    en JS, esto tiraba "ReferenceError: Cannot access 'client'
+ *    before initialization" en cada ejecución — el runner nunca
+ *    llegaba a enviar un mensaje. Se movió el chequeo a después
+ *    de obtener el cliente real.
  * =============================================================
  */
 
@@ -65,24 +77,6 @@ const RESULTADO = {
 
 async function run(instanceId){
 
-	//----------------------------------------------------------
-	// CLIENTE LISTO
-	//----------------------------------------------------------
-
-	if (!client.info || !client.info.wid) {
-
-   	 console.log("⏳ Cliente aún no terminó de iniciar.");
-
-    		return {
-
-       		 tipo: RESULTADO.PAUSA,
-
-        		pausa: 3000
-
-   	 };
-
-	}
-	
     //----------------------------------------------------------
     // Estado
     //----------------------------------------------------------
@@ -128,6 +122,24 @@ console.log("====================================");
             tipo: RESULTADO.ERROR,
 
             motivo: "Cliente no conectado"
+
+        };
+
+    }
+
+    //----------------------------------------------------------
+    // Cliente listo (terminó de autenticar)
+    //----------------------------------------------------------
+
+    if (!client.info || !client.info.wid) {
+
+        console.log("⏳ Cliente aún no terminó de iniciar.");
+
+        return {
+
+            tipo: RESULTADO.PAUSA,
+
+            pausa: 3000
 
         };
 

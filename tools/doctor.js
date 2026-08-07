@@ -7,9 +7,56 @@
  *
  * Doctor del Proyecto
  *
- * v1.0.0
+ * v1.3.1
  *
  * Diagnóstico completo del proyecto.
+ *
+ * CHANGELOG v1.3.1:
+ *  • FIX: la auto-exclusión de detectarPendientes comparaba
+ *    archivo.ruta === __filename, y en Windows eso puede fallar
+ *    por diferencias de casing entre como se invoca "node" y
+ *    como se resuelve __filename (letra de unidad, mayúsculas
+ *    de carpetas). Ahora se compara la ruta relativa normalizada
+ *    (barras + minúsculas) contra 'tools/doctor.js', que es
+ *    estable en cualquier plataforma.
+ *
+ * CHANGELOG v1.3.0:
+ *  • FIX: detectarPendientes ahora se excluye a sí mismo del
+ *    escaneo (compara archivo.ruta === __filename). El propio
+ *    doctor.js define el regex de deteccion y documenta la
+ *    convencion de marcadores en sus comentarios, lo que
+ *    generaba coincidencias falsas contra su propio codigo
+ *    fuente cada vez que se lo describia (incluido este mismo
+ *    changelog en versiones anteriores).
+ *
+ * CHANGELOG v1.2.0:
+ *  • FIX: detectarPendientes ya no usa el flag "i" (case-
+ *    insensitive). "todo" en minúsculas es una palabra común del
+ *    español y generaba falsos positivos (incluido dentro de este
+ *    mismo archivo). Los marcadores reales (TODO/FIXME/HACK) se
+ *    escriben en mayúsculas por convención, así que ahora solo se
+ *    detectan así. Se agregó \b (límite de palabra) por prolijidad.
+ *
+ * CHANGELOG v1.1.0:
+ *  • FIX: analizarExportsArchivo, analizarArchivoImports y
+ *    verificarDesestructuradoArchivo ahora limpian comentarios
+ *    antes de parsear (quitarComentarios). Antes, comentarios
+ *    dentro de "module.exports = { ... }" corrompían los
+ *    nombres detectados (falsos "EXPORT no existe" en
+ *    estado.js, scheduler-state.js).
+ *  • FIX: el regex de "const { ... } = require(...)" ya no usa
+ *    [\s\S]*? sin restricción — ahora solo acepta caracteres
+ *    válidos de identificador entre llaves, así no puede
+ *    "saltar" sobre código no relacionado buscando un require()
+ *    lejano (causaba los falsos errores gigantes con fragmentos
+ *    de código en routes/views.js).
+ *  • FIX: soporte para alias en destructuring/exports
+ *    ("{ router: authRoutes }" y "{ foo: bar }" en
+ *    module.exports) — se verifica el nombre real exportado,
+ *    no el alias local.
+ *  • FIX: un comentario que contenga literalmente 'import "..."'
+ *    (como el de este mismo archivo) ya no se detecta como un
+ *    import real.
  * =============================================================
  */
 
@@ -526,6 +573,39 @@ function leerArchivo(
 }
 
 //==============================================================
+// QUITAR COMENTARIOS
+// (evita falsos positivos: el parser de imports/exports/
+//  destructuring no debe leer texto dentro de comentarios)
+//==============================================================
+
+function quitarComentarios(codigo){
+
+    // Comentarios de bloque /* ... */: se blanquean preservando
+    // los saltos de línea para no romper el conteo de líneas.
+    let limpio = codigo.replace(
+
+        /\/\*[\s\S]*?\*\//g,
+
+        m => m.replace(/[^\n]/g, ' ')
+
+    );
+
+    // Comentarios de línea // ...: solo cuando '//' es lo primero
+    // no-espacio de la línea (estilo usado en todo este proyecto),
+    // para no tocar '//' dentro de strings (ej. URLs).
+    limpio = limpio.replace(
+
+        /^[ \t]*\/\/.*$/gm,
+
+        ''
+
+    );
+
+    return limpio;
+
+}
+
+//==============================================================
 // SYNTAX CHECKER
 //==============================================================
 
@@ -833,9 +913,13 @@ function analizarArchivoImports(
 
     const codigo=
 
-        leerArchivo(
+        quitarComentarios(
 
-            archivo
+            leerArchivo(
+
+                archivo
+
+            )
 
         );
 
@@ -1473,9 +1557,13 @@ function analizarExportsArchivo(
 
     const codigo=
 
-        leerArchivo(
+        quitarComentarios(
 
-            archivo
+            leerArchivo(
+
+                archivo
+
+            )
 
         );
 
@@ -1515,7 +1603,7 @@ function analizarExportsArchivo(
 
             .forEach(item=>{
 
-                const nombre=
+                let nombre=
 
                     item
 
@@ -1523,11 +1611,33 @@ function analizarExportsArchivo(
 
                     .replace(/\r/g,'')
 
-                    .replace(/\n/g,'');
+                    .replace(/\n/g,'')
+
+                    .trim();
+
+                // Soporta "clave: valor" (rename): lo exportado
+                // es la clave, no el valor.
+                if(
+
+                    nombre.includes(':')
+
+                ){
+
+                    nombre=
+
+                        nombre
+
+                        .split(':')[0]
+
+                        .trim();
+
+                }
 
                 if(
 
-                    nombre.length
+                    nombre.length &&
+
+                    /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(nombre)
 
                 ){
 
@@ -2057,19 +2167,29 @@ function verificarDesestructuradoArchivo(
 
     const codigo=
 
-        leerArchivo(
+        quitarComentarios(
 
-            archivo
+            leerArchivo(
+
+                archivo
+
+            )
 
         );
 
     //----------------------------------------------------------
     // const { ... } = require(...)
+    //
+    // El contenido entre llaves se restringe a caracteres
+    // válidos de un patrón de desestructuración (identificadores,
+    // comas, espacios y ':' para alias). Esto evita que el
+    // regex "salte" sobre código no relacionado (funciones,
+    // otros bloques { }, etc.) buscando un require() lejano.
     //----------------------------------------------------------
 
     const regex=
 
-        /const\s*\{([\s\S]*?)\}\s*=\s*require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/gm;
+        /const\s*\{\s*([A-Za-z0-9_$,\s:]+?)\s*\}\s*=\s*require\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/gm;
 
     let match;
 
@@ -2091,7 +2211,16 @@ function verificarDesestructuradoArchivo(
 
                 )
 
-                .filter(Boolean);
+                .filter(Boolean)
+
+                .map(
+
+                    // "foo: bar" (alias) -> lo que hay que
+                    // verificar contra los exports es "foo".
+
+                    x=>x.split(':')[0].trim()
+
+                );
 
         const modulo=
 
@@ -2381,11 +2510,38 @@ function inspeccionarProyecto(){
 
 function detectarPendientes(){
 
+    // Sin flag "i": en minúsculas "todo" es una palabra común del
+    // español y genera falsos positivos. Los marcadores reales se
+    // escriben en mayúsculas por convención.
+
     const regex=
 
-        /(TODO|FIXME|HACK)/gi;
+        /\b(TODO|FIXME|HACK)\b/g;
 
     for(const archivo of doctor.archivos){
+
+        // El doctor no se reporta a sí mismo. Se compara por ruta
+        // relativa normalizada (no por __filename === archivo.ruta,
+        // que en Windows puede fallar por diferencias de casing
+        // entre la letra de unidad/carpetas al invocar "node").
+
+        const rutaNormalizada=
+
+            archivo.relativa
+
+                .replace(/\\/g,'/')
+
+                .toLowerCase();
+
+        if(
+
+            rutaNormalizada==='tools/doctor.js'
+
+        ){
+
+            continue;
+
+        }
 
         const codigo=
 

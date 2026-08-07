@@ -6,7 +6,7 @@ const fs = require('fs');
 // NUEVO MOTOR IA
 //==============================================================
 
-const aiEngine = require('./ai/ai-engine');
+const aiEngine = require('../core/ai/ai-engine');
 
 //==============================================================
 // CONTEXTO DEL NEGOCIO

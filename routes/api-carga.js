@@ -8,6 +8,15 @@ const {
     guardarInstancia
 } = require('../services/instancias-persistencia');
 
+// v1.1.0
+//
+// CHANGELOG v1.1.0:
+//  • FIX: los contactos se guardaban solo con claves en mayúscula
+//    (NOMBRE, NUMERO). El resto del código es inconsistente sobre
+//    qué mayúscula/minúscula usa (crm-excel.js lee NUMERO directo,
+//    sin fallback; la vista del monitor mostraba nombre/número como
+//    undefined). Ahora se guardan ambas variantes en cada contacto.
+
 router.post('/cargar', async (req, res) => {
     try {
         const userId = req.session.userId;
@@ -171,8 +180,16 @@ router.post('/cargar', async (req, res) => {
             vistos.add(numero);
 
             contactos.push({
+                // Se guardan ambas variantes de mayúscula/minúscula:
+                // distintas partes del código leen una u otra
+                // (crm-excel.js usa NUMERO, la vista del monitor
+                // probablemente lee numero/nombre en minúscula) y
+                // así ninguna se queda con undefined sin tener que
+                // tocar cada consumidor.
                 NOMBRE: nombre,
                 NUMERO: numero,
+                nombre: nombre,
+                numero: numero,
                 estadoEnvio: 'pendiente',
                 fechaEnvio: null,
                 respondioInfo: false

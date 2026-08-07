@@ -5,7 +5,7 @@
  * MdI MultiWA
  * services/session-manager.js
  *
- * v3.0.0
+ * v3.4.0
  *
  * Session Manager ÚNICO
  *
@@ -21,6 +21,70 @@
  * NO maneja campañas.
  * NO maneja scheduler.
  * NO envía mensajes.
+ *
+ * CHANGELOG v3.4.0:
+ *  • FIX CRÍTICO: getUserInstances() solo devolvía instancias
+ *    en memoria. Una instancia que quedaba afuera del tope de
+ *    auto-restauración (MAX_INSTANCIAS_AUTO_RESTAURADAS, v3.3.0)
+ *    era invisible para la UI aunque tuviera sesión de WhatsApp
+ *    válida guardada — routes/views.js la contaba como
+ *    "sinInstancias" y terminaba creando una instancia nueva de
+ *    cero en vez de usar la existente. Ahora getUserInstances
+ *    combina memoria + persistencia; las pendientes se marcan
+ *    con iniciada:false.
+ *  • FIX: se eliminó una definición duplicada de getUserInstances
+ *    (código muerto, quedó de un merge anterior).
+ *  • NUEVO: iniciarSiNecesario(userId, io, instanceId) — arranca
+ *    una instancia persistida solo si no está corriendo en
+ *    memoria, sin crear una nueva. Para usar en routes/views.js
+ *    cuando el usuario elige/cae en una instancia "pendiente".
+ *
+ * CHANGELOG v3.3.0:
+ *  • FIX: se agregó MAX_INSTANCIAS_AUTO_RESTAURADAS (default 2)
+ *    en restaurarSesiones. Con RAM limitada (8GB), auto-restaurar
+ *    todas las instancias guardadas (aunque el usuario solo use
+ *    2 en la práctica) revienta la máquina: cada instancia que
+ *    termina de inicializar se queda corriendo en memoria, así
+ *    que el límite de concurrencia de arranque no alcanza para
+ *    evitar el problema en estado estable. Ahora, al llegar al
+ *    tope, las instancias sobrantes NO se auto-inician — quedan
+ *    disponibles para iniciarlas a mano desde la interfaz.
+ *    Ajustar la constante según la RAM de la máquina.
+ *  • FIX: se agregaron flags de Puppeteer para desactivar el
+ *    crash-reporter de Chrome (--disable-crash-reporter,
+ *    --disable-breakpad, --no-crash-upload), que era la causa
+ *    de los errores "EBUSY: resource busy or locked, unlink
+ *    ...CrashpadMetrics-active.pma" al correr varios Chrome en
+ *    simultáneo en Windows.
+ *
+ * CHANGELOG v3.2.0:
+ *  • FIX: se agregó un límite de inicializaciones concurrentes
+ *    (MAX_INIT_CONCURRENTES = 2). Con muchas instancias
+ *    arrancando Chrome al mismo tiempo (restauración al boot +
+ *    instancias nuevas desde la UI) la máquina se quedaba sin
+ *    RAM/CPU y Chrome se cerraba a mitad de la inicialización
+ *    (TargetCloseError: Target closed). Ahora initialize() se
+ *    encola y solo corren 2 en simultáneo; el resto espera su
+ *    turno. Se puede subir MAX_INIT_CONCURRENTES si la máquina
+ *    tiene recursos de sobra.
+ *
+ * CHANGELOG v3.1.0:
+ *  • FIX CRÍTICO: se agregó shutdown() (no existía). index.js
+ *    lo llama en SIGINT/SIGTERM pero, al no existir, los
+ *    clientes de WhatsApp (y sus procesos de Chrome) nunca se
+ *    cerraban limpio. Chrome deja un archivo SingletonLock en
+ *    la carpeta de sesión mientras corre y solo lo borra al
+ *    cerrar limpio. Sin ese cierre, el lock queda huérfano y
+ *    en el próximo arranque Puppeteer se cuelga para siempre
+ *    esperando poder tomarlo — sin error, sin timeout. Esto es
+ *    lo que causaba que la app se quedara "esperando el QR"
+ *    indefinidamente.
+ *  • FIX: limpiarLocksSesion() borra SingletonLock/Cookie/Socket
+ *    huérfanos ANTES de crear cada cliente, para autorepararse
+ *    aunque ya haya quedado un lock viejo de antes de este fix.
+ *  • FIX: se agregó timeout/protocolTimeout a Puppeteer como
+ *    red de seguridad — si algo se cuelga igual, tira error en
+ *    vez de esperar para siempre.
  * =============================================================
  */
 
@@ -76,6 +140,72 @@ const SESSIONS_DIR =
 fs.mkdirSync(SESSIONS_DIR, {
     recursive: true
 });
+
+//==============================================================
+// LÍMITE DE INICIALIZACIONES CONCURRENTES
+//==============================================================
+//
+// Cada instancia abre su propio Chrome headless. Inicializar
+// muchas al mismo tiempo (restauración al arrancar + instancias
+// nuevas creadas desde la UI) puede agotar RAM/CPU y hacer que
+// Chrome se cierre a mitad de camino (TargetCloseError: Target
+// closed). Se limita cuántos initialize() corren en simultáneo;
+// el resto espera su turno en una cola simple FIFO.
+//==============================================================
+
+const MAX_INIT_CONCURRENTES = 2;
+
+let initEnCurso = 0;
+
+const colaInit = [];
+
+function adquirirTurnoInit() {
+
+    return new Promise(resolve => {
+
+        const intentar = () => {
+
+            if (
+
+                initEnCurso < MAX_INIT_CONCURRENTES
+
+            ) {
+
+                initEnCurso++;
+
+                resolve();
+
+            }
+
+            else {
+
+                colaInit.push(intentar);
+
+            }
+
+        };
+
+        intentar();
+
+    });
+
+}
+
+function liberarTurnoInit() {
+
+    initEnCurso--;
+
+    const siguiente =
+
+        colaInit.shift();
+
+    if (siguiente) {
+
+        siguiente();
+
+    }
+
+}
 
 //==============================================================
 // CHROME
@@ -203,6 +333,109 @@ async function gracefulDestroy(client) {
     }
 
     catch {}
+
+}
+
+//==============================================================
+// LIMPIAR LOCKS DE CHROME (SESIONES HUÉRFANAS)
+//==============================================================
+//
+// Si el proceso se cierra sin llamar a client.destroy() (ej:
+// Ctrl+C sin shutdown limpio, crash, kill del proceso), Chrome
+// deja un SingletonLock en la carpeta de perfil y nunca lo
+// borra. En el próximo arranque, Puppeteer intenta abrir Chrome
+// en esa misma carpeta, ve el lock, y se queda esperando para
+// siempre sin tirar error ni timeout — initialize() nunca
+// resuelve. Se limpian esos archivos ANTES de crear el cliente.
+//==============================================================
+
+function limpiarLocksSesion(instanceId) {
+
+    const sessionDir =
+
+        path.join(
+
+            SESSIONS_DIR,
+
+            `session-${instanceId}`
+
+        );
+
+    if (
+
+        !fs.existsSync(sessionDir)
+
+    ) {
+
+        return;
+
+    }
+
+    const archivosLock = [
+
+        'SingletonLock',
+
+        'SingletonCookie',
+
+        'SingletonSocket'
+
+    ];
+
+    for (const nombre of archivosLock) {
+
+        const ruta =
+
+            path.join(
+
+                sessionDir,
+
+                nombre
+
+            );
+
+        try {
+
+            if (
+
+                fs.existsSync(ruta)
+
+            ) {
+
+                fs.rmSync(
+
+                    ruta,
+
+                    {
+
+                        force: true
+
+                    }
+
+                );
+
+                console.log(
+
+                    `🧹 Lock huérfano eliminado: ${nombre} (${instanceId})`
+
+                );
+
+            }
+
+        }
+
+        catch (err) {
+
+            console.warn(
+
+                `⚠ No se pudo limpiar ${nombre} (${instanceId}):`,
+
+                err.message
+
+            );
+
+        }
+
+    }
 
 }
 
@@ -362,6 +595,12 @@ async function startSession(
     // Registrar instancia
     //----------------------------------------------------------
 
+console.log("================================");
+console.log("CREANDO INSTANCIA EN MEMORIA");
+console.log("Usuario:", userId);
+console.log("Instancia:", instanceId);
+console.log("================================");
+
     if (!userSession.instances.has(instanceId)) {
 
         userSession.instances.set(
@@ -382,15 +621,20 @@ async function startSession(
 
         );
 
+console.log(
+    "Instancias en memoria:",
+    [...userSession.instances.keys()]
+);
+
     }
 
 guardarInstancia(
 
     userId,
 
-    {
+    instanceId,
 
-        id: instanceId,
+    {
 
         numero: '',
 
@@ -425,6 +669,12 @@ guardarInstancia(
     }
 
     //----------------------------------------------------------
+    // Limpiar locks huérfanos antes de crear el cliente
+    //----------------------------------------------------------
+
+    limpiarLocksSesion(instanceId);
+
+    //----------------------------------------------------------
     // Crear Cliente
     //----------------------------------------------------------
 
@@ -444,6 +694,10 @@ guardarInstancia(
 
             executablePath: findChromePath(),
 
+            timeout: 60000,
+
+            protocolTimeout: 60000,
+
             args: [
 
                 '--no-sandbox',
@@ -454,6 +708,11 @@ guardarInstancia(
 
                 '--disable-gpu',
 
+                '--disable-crash-reporter',
+
+                '--disable-breakpad',
+
+                '--no-crash-upload'
 
             ]
 
@@ -802,6 +1061,8 @@ guardarInstancia(
     // INITIALIZE
     //----------------------------------------------------------
 
+    await adquirirTurnoInit();
+
     try {
 
     //TEMPORAL INI
@@ -833,6 +1094,12 @@ console.log("3 - initialize() terminó");
         clients.delete(instanceId);
 
         throw err;
+
+    }
+
+    finally {
+
+        liberarTurnoInit();
 
     }
 
@@ -912,6 +1179,22 @@ async function removeInstance(
 // RESTAURAR SESIONES
 //==============================================================
 
+//==============================================================
+// TOPE DE INSTANCIAS AUTO-RESTAURADAS AL ARRANCAR
+//==============================================================
+//
+// Con RAM limitada, restaurar TODAS las instancias guardadas
+// (aunque sean 8) revienta la máquina aunque se limite la
+// concurrencia de arranque (MAX_INIT_CONCURRENTES), porque cada
+// una que termina de inicializar se queda corriendo en memoria.
+// Se pone un techo al total de instancias que se auto-restauran
+// al boot; las que sobran quedan sin arrancar (el usuario las
+// puede iniciar a mano desde la UI cuando las necesite).
+// Ajustar según la RAM disponible de la máquina.
+//==============================================================
+
+const MAX_INSTANCIAS_AUTO_RESTAURADAS = 2;
+
 async function restaurarSesiones(io) {
 
     console.log(
@@ -935,6 +1218,24 @@ async function restaurarSesiones(io) {
             continue;
 
         for (const instancia of instancias) {
+
+            if (
+
+                clients.size >= MAX_INSTANCIAS_AUTO_RESTAURADAS
+
+            ) {
+
+                console.log(
+
+                    `⏸ Tope de instancias auto-restauradas (${MAX_INSTANCIAS_AUTO_RESTAURADAS}) alcanzado. ` +
+
+                    `"${instancia.id}" no se inicia automáticamente — iniciala desde la interfaz si la necesitás.`
+
+                );
+
+                continue;
+
+            }
 
             try {
 
@@ -1125,34 +1426,130 @@ async function restaurarTodas(io){
 }
 
 //==============================================================
+// INICIAR INSTANCIA SI HACE FALTA
+//==============================================================
+//
+// Arranca una instancia existente (persistida) SOLO si todavía
+// no está corriendo en memoria. No crea nada nuevo — para eso ya
+// existe /nueva-instancia. Pensado para cuando el usuario elige
+// o cae en una instancia que quedó "pendiente" por el tope de
+// auto-restauración (ver getUserInstances). Respeta la cola de
+// concurrencia (adquirirTurnoInit) como cualquier otro arranque.
+//==============================================================
+
+async function iniciarSiNecesario(userId, io, instanceId){
+
+    if(
+
+        clients.has(instanceId)
+
+    ){
+
+        return false;
+
+    }
+
+    await startSession(
+
+        userId,
+
+        io,
+
+        instanceId
+
+    );
+
+    return true;
+
+}
+
+//==============================================================
 // OBTENER INSTANCIAS DEL USUARIO
+//==============================================================
+
+//==============================================================
+// OBTENER INSTANCIAS DEL USUARIO
+//==============================================================
+//
+// Combina lo que está corriendo en memoria con lo persistido en
+// disco. Antes solo devolvía lo que estaba en memoria: si una
+// instancia quedaba afuera del tope de auto-restauración
+// (MAX_INSTANCIAS_AUTO_RESTAURADAS), era invisible para la UI
+// aunque tuviera una sesión de WhatsApp válida guardada — la
+// vista pensaba "este usuario no tiene instancias" y terminaba
+// creando una nueva de cero (routes/views.js: sinInstancias).
+// Ahora las pendientes se listan igual, marcadas con
+// iniciada:false, para que la UI pueda arrancarlas en vez de
+// duplicarlas.
 //==============================================================
 
 function getUserInstances(userId){
 
-    const session = sessions.get(userId);
+    const session =
 
-    if(!session){
+        sessions.get(userId);
 
-        return [];
+    const enMemoria =
 
-    }
+        session
 
-    return [...session.instances.values()];
+            ? [...session.instances.values()]
 
-}
+            : [];
 
-function getUserInstances(userId){
+    const idsEnMemoria =
 
-    const session = sessions.get(userId);
+        new Set(
 
-    if(!session){
+            enMemoria.map(i => i.id)
 
-        return [];
+        );
 
-    }
+    const persistidas =
 
-    return [...session.instances.values()];
+        obtenerInstanciasPorUsuario(userId);
+
+    const pendientes =
+
+        persistidas
+
+            .filter(
+
+                p => !idsEnMemoria.has(p.id)
+
+            )
+
+            .map(p => ({
+
+                id: p.id,
+
+                numero: p.numero || '',
+
+                listo: p.listo || false,
+
+                estado: null,
+
+                iniciada: false
+
+            }));
+
+    return [
+
+        ...enMemoria.map(
+
+            i => ({
+
+                ...i,
+
+                iniciada: true
+
+            })
+
+        ),
+
+        ...pendientes
+
+    ];
 
 }
 
@@ -1251,6 +1648,69 @@ function guardarInstanciaSesion(
 }
 
 //==============================================================
+// SHUTDOWN
+//==============================================================
+//
+// index.js llama a sessionManager.shutdown() al recibir
+// SIGINT/SIGTERM, pero esta función no existía — por eso los
+// clientes de WhatsApp (y sus procesos de Chrome) nunca se
+// cerraban limpio, dejando locks huérfanos que colgaban el
+// próximo arranque (ver limpiarLocksSesion).
+//==============================================================
+
+async function shutdown() {
+
+    console.log(
+
+        `🛑 Cerrando ${clients.size} cliente(s) de WhatsApp...`
+
+    );
+
+    const destrucciones =
+
+        [...clients.entries()].map(
+
+            async ([instanceId, client]) => {
+
+                try {
+
+                    await gracefulDestroy(client);
+
+                    console.log(
+
+                        `✅ Cliente cerrado: ${instanceId}`
+
+                    );
+
+                }
+
+                catch (err) {
+
+                    console.warn(
+
+                        `⚠ Error cerrando ${instanceId}:`,
+
+                        err.message
+
+                    );
+
+                }
+
+            }
+
+        );
+
+    await Promise.allSettled(
+
+        destrucciones
+
+    );
+
+    clients.clear();
+
+}
+
+//==============================================================
 // EXPORTS
 //==============================================================
 
@@ -1280,6 +1740,8 @@ module.exports = {
 
     restaurarTodas,
 
+    iniciarSiNecesario,
+
     registerSocket,
 
     unregisterSocket,
@@ -1288,6 +1750,8 @@ module.exports = {
 
     emitReady,
 
-    emitInstancesUpdate
+    emitInstancesUpdate,
+
+    shutdown
 
 };

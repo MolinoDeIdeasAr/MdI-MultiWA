@@ -7,9 +7,17 @@
  *
  * Bootstrap principal
  *
- * Versión : v5.0.0
- * Fecha   : 2026-07-26
+ * Versión : v5.1.0
+ * Fecha   : 2026-08-06
  *
+ * CHANGELOG v5.1.0:
+ *  • FIX: se eliminó un console.log('🗓️ Campaign Scheduler
+ *    inicializado') redundante justo después de scheduler.init(io).
+ *    La función init() ya imprime ese mismo log internamente
+ *    (services/campaign-scheduler.js), así que aparecía duplicado
+ *    en la consola al arrancar aunque el scheduler solo se
+ *    inicializa una vez (no era un bug de doble-init, solo de
+ *    doble-log).
  * =============================================================
  */
 
@@ -157,12 +165,6 @@ app.use(
 //==============================================================
 
 scheduler.init(io);
-
-console.log(
-
-    '🗓️ Campaign Scheduler inicializado'
-
-);
 
 //==============================================================
 // SOCKET.IO

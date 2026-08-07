@@ -4,6 +4,18 @@ const sessionManager = require('../services/session-manager');
 const { cargarEstado } = require('../state/estado');
 const { isAuthenticated } = require('./auth');
 
+// v1.1.0
+//
+// CHANGELOG v1.1.0:
+//  • FIX CRÍTICO: GET / y POST /seleccionar-instancia ahora arrancan
+//    (sessionManager.iniciarSiNecesario) una instancia "pendiente"
+//    (persistida pero no corriendo en memoria) en vez de dejarla
+//    dormida. Antes esto hacía que el usuario pareciera "sin
+//    instancias" y el flujo terminaba creando una instancia nueva
+//    en vez de reusar la existente ya vinculada — requiere
+//    session-manager.js v3.4.0+ (getUserInstances combinado +
+//    iniciarSiNecesario).
+
 router.use(isAuthenticated);
 
 // ─────────────────────────────────────────────
@@ -12,6 +24,7 @@ router.use(isAuthenticated);
 router.get('/', async (req, res) => {
     try {
         const userId = req.session.userId;
+        const io = req.app.get('io');
         const instancias = sessionManager.getUserInstances(userId);
         let activeId = sessionManager.getActiveInstanceId(userId);
 
@@ -20,6 +33,17 @@ router.get('/', async (req, res) => {
             const conectada = instancias.find(i => i.listo) || instancias[0];
             sessionManager.setActiveInstance(userId, conectada.id);
             activeId = conectada.id;
+        }
+
+        // FIX: si la instancia activa quedó "pendiente" (persistida pero
+        // no corriendo en memoria, ej: afuera del tope de auto-restauración),
+        // arrancarla en vez de dejarla dormida — antes esto hacía que la
+        // pantalla pareciera "sin instancias" y terminara creando una nueva.
+        const activa = instancias.find(i => i.id === activeId);
+        if (activa && activa.iniciada === false) {
+            sessionManager.iniciarSiNecesario(userId, io, activeId).catch(e => {
+                console.error('Error iniciando instancia pendiente:', e.message);
+            });
         }
 
         let estado = sessionManager.getEstado(userId);
@@ -153,8 +177,17 @@ router.post('/seleccionar-instancia', (req, res) => {
     try {
         const { instanceId } = req.body;
         const userId = req.session.userId;
+        const io = req.app.get('io');
         if (!instanceId) return res.redirect('/');
         sessionManager.setActiveInstance(userId, instanceId);
+
+        // FIX: si la instancia elegida no está corriendo en memoria
+        // (quedó pendiente por el tope de auto-restauración), arrancarla
+        // en vez de dejarla dormida.
+        sessionManager.iniciarSiNecesario(userId, io, instanceId).catch(e => {
+            console.error('Error iniciando instancia pendiente:', e.message);
+        });
+
         // FIX: redirigir a la página desde donde vino si está disponible
         const referer = req.headers.referer || '/';
         res.redirect(referer.includes('monitor') ? '/monitor' : '/');
