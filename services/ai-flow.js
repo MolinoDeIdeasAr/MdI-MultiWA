@@ -60,7 +60,14 @@ class AIFlow {
 
                     rubro:
 
-                        context.estadoTemporal?.rubro || ''
+                        context.estadoTemporal?.rubro || '',
+
+                    // Respuesta a "INFO" propia de esta campaña —
+                    // si no se configuró ninguna, ai-rules.js cae
+                    // al texto genérico por defecto.
+                    respuestaInfoPersonalizada:
+
+                        context.estadoTemporal?.respuestaInfo || ''
 
                 }
 

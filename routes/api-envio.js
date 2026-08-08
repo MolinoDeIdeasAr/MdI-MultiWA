@@ -5,7 +5,7 @@
  * MdI MultiWA
  * routes/api-envio.js
  *
- * v3.0.0
+ * v3.1.0
  *
  * API DE ENVÍOS
  *
@@ -13,7 +13,6 @@
  *
  * • Guardar mensajes
  * • Guardar imagen
- * • Guardar audio
  * • Iniciar campaña
  * • Pausar campaña
  * • Reanudar campaña
@@ -22,6 +21,11 @@
  * NO envía mensajes.
  * NO ejecuta timers.
  * NO contiene lógica antiban.
+ *
+ * CHANGELOG v3.1.0:
+ *  • Se eliminó toda referencia a audio (ya no se usa esa
+ *    función): rutas POST /audio y DELETE /audio, e imports de
+ *    guardarAudio/eliminarAudio de state/estado.js.
  * =============================================================
  */
 
@@ -57,11 +61,7 @@ const {
 
     guardarImagen,
 
-    guardarAudio,
-
     eliminarImagen,
-
-    eliminarAudio,
 
     resetearContadores
 
@@ -141,7 +141,9 @@ router.post(
 
                 instanceId,
 
-                mensajes
+                mensajes,
+
+                respuestaInfo
 
             } = req.body;
 
@@ -264,6 +266,25 @@ router.post(
                     error:'Estado inexistente'
 
                 });
+
+            }
+
+            //--------------------------------------------------
+            // Respuesta a "INFO" propia de esta campaña
+            // (opcional — si no viene, no se toca lo que ya
+            // había guardado; guardarMensajes() persiste todo
+            // junto abajo)
+            //--------------------------------------------------
+
+            if(
+
+                typeof respuestaInfo === 'string'
+
+            ){
+
+                estado.respuestaInfo =
+
+                    respuestaInfo.trim();
 
             }
 
@@ -494,228 +515,6 @@ router.delete(
             console.log(
 
                 `🗑 Imagen eliminada (${instanceId})`
-
-            );
-
-            return res.json({
-
-                ok:true
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// SUBIR AUDIO
-//==============================================================
-
-router.post(
-
-    '/audio',
-
-    upload.single('audio'),
-
-    async (
-
-        req,
-
-        res
-
-    ) => {
-
-        try{
-
-            const {
-
-                instanceId
-
-            } = req.body;
-
-            //--------------------------------------------------
-            // Validaciones
-            //--------------------------------------------------
-
-            if(
-
-                !instanceId
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'instanceId requerido'
-
-                });
-
-            }
-
-            if(
-
-                !req.file
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'No se recibió ningún audio'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // Estado
-            //--------------------------------------------------
-
-            const estado =
-
-                getEstadoInstancia(
-
-                    instanceId
-
-                );
-
-            if(
-
-                !estado
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'Estado inexistente'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // Guardar audio
-            //--------------------------------------------------
-
-            guardarAudio(
-
-                instanceId,
-
-                req.file.filename
-
-            );
-
-            console.log(
-
-                `🎤 Audio guardado (${instanceId}) -> ${req.file.filename}`
-
-            );
-
-            return res.json({
-
-                ok:true,
-
-                archivo:req.file.filename
-
-            });
-
-        }
-
-        catch(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                ok:false,
-
-                error:err.message
-
-            });
-
-        }
-
-    }
-
-);
-
-//==============================================================
-// ELIMINAR AUDIO
-//==============================================================
-
-router.delete(
-
-    '/audio',
-
-    async (
-
-        req,
-
-        res
-
-    ) => {
-
-        try{
-
-            const {
-
-                instanceId
-
-            } = req.body;
-
-            //--------------------------------------------------
-            // Validaciones
-            //--------------------------------------------------
-
-            if(
-
-                !instanceId
-
-            ){
-
-                return res.status(400).json({
-
-                    ok:false,
-
-                    error:'instanceId requerido'
-
-                });
-
-            }
-
-            //--------------------------------------------------
-            // Eliminar audio
-            //--------------------------------------------------
-
-            eliminarAudio(
-
-                instanceId
-
-            );
-
-            console.log(
-
-                `🗑 Audio eliminado (${instanceId})`
 
             );
 

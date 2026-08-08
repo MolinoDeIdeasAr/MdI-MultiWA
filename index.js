@@ -7,17 +7,21 @@
  *
  * Bootstrap principal
  *
- * Versión : v5.1.0
- * Fecha   : 2026-08-06
+ * Versión : v5.2.0
+ * Fecha   : 2026-08-07
  *
- * CHANGELOG v5.1.0:
- *  • FIX: se eliminó un console.log('🗓️ Campaign Scheduler
- *    inicializado') redundante justo después de scheduler.init(io).
- *    La función init() ya imprime ese mismo log internamente
- *    (services/campaign-scheduler.js), así que aparecía duplicado
- *    en la consola al arrancar aunque el scheduler solo se
- *    inicializa una vez (no era un bug de doble-init, solo de
- *    doble-log).
+ * CHANGELOG v5.2.0:
+ *  • FIX: se agregó app.set('io', io) — routes/views.js usa
+ *    req.app.get('io') en varios lugares y nunca se había seteado,
+ *    devolvía undefined en silencio.
+ *  • FIX: se reemplazó el io.on('connection', ...) propio (que
+ *    convivía sin saberlo con sockets/conversations.js, nunca
+ *    conectado) por setupSockets(io) — un solo punto de entrada
+ *    de sockets, con salas por usuario. El código viejo además
+ *    llamaba unregisterSocket(socket) pasando el socket entero en
+ *    vez del userId, así que nunca desregistraba nada al
+ *    desconectar.
+ *
  * =============================================================
  */
 
@@ -37,6 +41,9 @@ const sessionManager =
 
 const scheduler =
     require('./services/campaign-scheduler');
+
+const { setupSockets } =
+    require('./sockets/conversations');
 
 
 //==============================================================
@@ -76,6 +83,11 @@ const server =
 
 const io =
     new Server(server);
+
+// Para que las rutas puedan acceder a io vía req.app.get('io')
+// (routes/views.js lo usa en iniciarSiNecesario, entre otros).
+// Faltaba — req.app.get('io') devolvía undefined en silencio.
+app.set('io', io);
 
 
 //==============================================================
@@ -135,6 +147,24 @@ app.use(
 
 );
 
+// Servir las imágenes/archivos subidos (uploads/) — no existía
+// NINGUNA ruta que sirviera esta carpeta. Por eso el <img
+// src="/uploads/..."> de la imagen persistida siempre daba 404
+// al cargar la página, y solo se veía la vista previa cuando se
+// volvía a seleccionar el archivo a mano (esa es local, lee el
+// disco del navegador, nunca pasa por el servidor).
+app.use(
+
+    '/uploads',
+
+    express.static(
+
+        path.join(__dirname, 'uploads')
+
+    )
+
+);
+
 
 //==============================================================
 // SESSION
@@ -169,28 +199,17 @@ scheduler.init(io);
 //==============================================================
 // SOCKET.IO
 //==============================================================
+//
+// Antes había un io.on('connection', ...) acá mismo, en paralelo
+// a sockets/conversations.js (que no estaba conectado a nada).
+// Se unifica en un solo lugar: setupSockets ya arma las salas por
+// usuario (user_${userId}), maneja join/reconnect/disconnect, y
+// registra correctamente el socket (el código viejo acá llamaba
+// unregisterSocket(socket) pasando el socket entero en vez del
+// userId, así que nunca se desregistraba nada al desconectar).
+//==============================================================
 
-io.on('connection', socket => {
-
-    console.log('🔌 Socket conectado:', socket.id);
-
-    socket.on('join', userId => {
-
-        console.log('👤 JOIN:', userId);
-
-        sessionManager.registerSocket(userId, socket);
-
-    });
-
-    socket.on('disconnect', () => {
-
-        console.log('❌ Socket desconectado');
-
-        sessionManager.unregisterSocket(socket);
-
-    });
-
-});
+setupSockets(io);
 
 //==============================================================
 // RUTAS

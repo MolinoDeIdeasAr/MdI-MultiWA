@@ -80,6 +80,16 @@ Un asesor continuará la conversación con vos a la brevedad.`
 // ANALIZAR REGLAS
 //==============================================================
 
+// v1.1.0
+//
+// CHANGELOG v1.1.0:
+//  • FIX: la respuesta a "INFO" estaba hardcodeada y era la
+//    misma para TODAS las campañas/instancias. Ahora
+//    analizarReglas() acepta un contexto.respuestaInfoPersonalizada
+//    opcional — si la campaña definió su propia respuesta, se usa
+//    esa; si no, se cae al texto genérico de siempre (RESPUESTAS.info)
+//    para no romper campañas que nunca configuraron una propia.
+
 function analizarReglas(
 
     mensaje,
@@ -217,6 +227,8 @@ function analizarReglas(
             proxima_accion_dias: 3,
 
             respuesta_sugerida:
+
+                contexto.respuestaInfoPersonalizada ||
 
                 RESPUESTAS.info,
 

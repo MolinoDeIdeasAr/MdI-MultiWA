@@ -1,11 +1,19 @@
 /**
  * =============================================================
  *  MdI MultiWA — sockets/conversations.js
- *  Versión : v1.37.0
- *  Fecha   : 2026-07-04
+ *  Versión : v1.38.0
+ *  Fecha   : 2026-08-07
  * =============================================================
  *  CHANGELOG
  *  ---------
+ *  v1.38.0 — Este archivo no estaba conectado a nada (index.js
+ *             tenía su propio io.on('connection') en paralelo) y
+ *             llamaba a sessionManager.addSocket/removeSocket,
+ *             que no existen (son registerSocket/unregisterSocket).
+ *             Se corrigen esas llamadas, se usa io.to(sala) en vez
+ *             de socket.emit directo (la sala se unía pero nunca
+ *             se aprovechaba), y este es ahora el ÚNICO punto de
+ *             conexión de sockets — index.js ya no tiene el suyo.
  *  v1.37.0 — Cada usuario se une a su sala privada (user_${userId}).
  *             Los eventos instances_update, nueva_respuesta y
  *             whatsapp_ready se emiten por sala, no globalmente.
@@ -18,6 +26,10 @@
 
 const sessionManager = require('../services/session-manager');
 
+function salaDe(userId) {
+    return `user_${userId}`;
+}
+
 function setupSockets(io) {
     io.on('connection', (socket) => {
         console.log(`🔌 Socket conectado: ${socket.id}`);
@@ -28,13 +40,13 @@ function setupSockets(io) {
             socket.userId = userId;
 
             // Sala privada por usuario — evita que un usuario vea datos de otro
-            socket.join(`user_${userId}`);
+            socket.join(salaDe(userId));
             console.log(`👤 [${userId.slice(-6)}] → socket ${socket.id}`);
 
-            sessionManager.addSocket(userId, socket);
+            sessionManager.registerSocket(userId, socket);
 
             // Enviar estado actual de instancias al conectar
-            const instancias = sessionManager.getUserInstances(userId);
+            const instancias = sessionManager.getUserInstancesResumen(userId);
             socket.emit('instances_update', { instancias });
             socket.emit('qr_waiting', { message: 'Esperando QR del servidor...' });
         });
@@ -53,7 +65,7 @@ function setupSockets(io) {
         socket.on('reconnect_state', (userId) => {
             const uid = userId || socket.userId;
             if (!uid) return;
-            const instancias = sessionManager.getUserInstances(uid);
+            const instancias = sessionManager.getUserInstancesResumen(uid);
             socket.emit('instances_update', { instancias });
             console.log(`🔄 Estado reenviado a ${uid} por reconexión`);
         });
@@ -62,7 +74,7 @@ function setupSockets(io) {
         socket.on('disconnect', (reason) => {
             console.log(`🔌 Socket desconectado: ${socket.id} — ${reason}`);
             if (socket.userId) {
-                sessionManager.removeSocket(socket.userId, socket);
+                sessionManager.unregisterSocket(socket.userId);
             }
         });
 
@@ -73,4 +85,4 @@ function setupSockets(io) {
     });
 }
 
-module.exports = { setupSockets };
+module.exports = { setupSockets, salaDe };

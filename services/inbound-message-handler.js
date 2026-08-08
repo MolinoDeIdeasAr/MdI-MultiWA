@@ -26,6 +26,26 @@ const {
 
 } = require('../state/estado');
 
+const socketNotifier =
+    require('./socket-notifier');
+
+// v1.1.0
+//
+// CHANGELOG v1.1.0:
+//  • FIX CRÍTICO: nunca se escribía en estado.conversaciones —
+//    la pantalla /conversaciones estaba condenada a mostrarse
+//    vacía para siempre, sin importar cuántos mensajes llegaran.
+//    Ahora cada mensaje entrante se agrega al array (requiere
+//    state/estado.js v3.1.0+, que cambia conversaciones de {} a []).
+//  • FIX: el broadcast por socket usaba io.emit() global — le
+//    llegaba a TODOS los usuarios conectados, no solo al dueño
+//    de la instancia (fuga de datos entre cuentas). Ahora usa
+//    socketNotifier, que emite solo a la sala del usuario
+//    (user_${userId}).
+//  • FIX: se emite 'nueva_respuesta' (lo que escucha
+//    conversaciones.ejs) además de 'estado_actualizado' — antes
+//    no se emitía nada con ese nombre.
+
 //==============================================================
 // HANDLER PRINCIPAL
 //==============================================================
@@ -106,9 +126,9 @@ async function handleInboundMessage({
         // CONTACTO
         //------------------------------------------------------
 
-        const contacto = resolverContacto(
+        const contacto = await resolverContacto(
 
-            msg.from,
+            msg,
 
             estado.contactosCargados || []
 
@@ -182,11 +202,67 @@ async function handleInboundMessage({
         // ACTUALIZAR ESTADO TEMPORAL
         //------------------------------------------------------
 
+        if (
+
+            !Array.isArray(estado.conversaciones)
+
+        ) {
+
+            estado.conversaciones = [];
+
+        }
+
+        const conv = {
+
+            id:
+
+                `${instanceId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+
+            nombre:
+
+                context.nombre,
+
+            numero:
+
+                context.numero,
+
+            origenNumero:
+
+                numeroInstancia || '',
+
+            fecha:
+
+                context.fecha.toLocaleString('es-AR'),
+
+            mensaje:
+
+                context.texto,
+
+            estado:
+
+                context.estadoIA || 'pendiente',
+
+            respuesta:
+
+                context.respuestaIA || ''
+
+        };
+
+        estado.conversaciones.unshift(
+
+            conv
+
+        );
+
         actualizarEstado(
 
             instanceId,
 
             {
+
+                conversaciones:
+
+                    estado.conversaciones,
 
                 ultimoMensaje:
 
@@ -302,23 +378,29 @@ async function handleInboundMessage({
 
         ) {
 
-            io.emit(
+            socketNotifier.emitEstadoActualizado(
 
-                'estado_actualizado',
+                io,
 
-                {
+                userId,
 
-                    instanceId,
+                instanceId,
 
-                    estado:
+                getEstadoInstancia(
 
-                        getEstadoInstancia(
+                    instanceId
 
-                            instanceId
+                )
 
-                        )
+            );
 
-                }
+            socketNotifier.emitNuevaConversacion(
+
+                io,
+
+                userId,
+
+                conv
 
             );
 

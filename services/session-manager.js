@@ -120,6 +120,9 @@ const {
 
 } = require('./instancias-persistencia');
 
+const socketNotifier =
+    require('./socket-notifier');
+
 
 //==============================================================
 // CONSTANTES
@@ -486,66 +489,6 @@ function getEstado(userId) {
 }
 
 //==============================================================
-// SOCKET HELPERS
-//==============================================================
-
-function emitQr(userId, qr) {
-
-    const socket = userSockets.get(userId);
-
-    if (!socket)
-        return;
-
-    socket.emit(
-
-        'qr',
-
-        qr
-
-    );
-
-}
-
-function emitReady(userId, data) {
-
-    const socket = userSockets.get(userId);
-
-    if (!socket)
-        return;
-
-    socket.emit(
-
-        'whatsapp_ready',
-
-        data
-
-    );
-
-}
-
-function emitInstancesUpdate(userId) {
-
-    const socket = userSockets.get(userId);
-
-    if (!socket)
-        return;
-
-    const session = sessions.get(userId);
-
-    if (!session)
-        return;
-
-    socket.emit(
-
-        'instances_updated',
-
-        [...session.instances.values()]
-
-    );
-
-}
-
-//==============================================================
 // START SESSION
 //==============================================================
 
@@ -627,6 +570,29 @@ console.log(
 );
 
     }
+
+    //----------------------------------------------------------
+    // Resetear "listo" del estado de campaña al arrancar una
+    // sesión nueva. estado.listo queda persistido en disco desde
+    // la ÚLTIMA vez que conectó y nunca se resetea — sin esto,
+    // la pantalla mostraba "✅ WhatsApp Conectado" (dato viejo)
+    // apenas arrancaba el server, antes de que Puppeteer/
+    // whatsapp-web.js siquiera empezara a autenticar de nuevo.
+    // Recién se vuelve a poner en true cuando llega el evento
+    // 'ready' de esta sesión.
+    //----------------------------------------------------------
+
+    actualizarEstado(
+
+        instanceId,
+
+        {
+
+            listo: false
+
+        }
+
+    );
 
 guardarInstancia(
 
@@ -786,7 +752,9 @@ guardarInstancia(
 
                     qr: qrImage
 
-                }
+                },
+
+                io
 
             );
 
@@ -828,6 +796,34 @@ guardarInstancia(
             console.log("================================");
             console.log("✅ WHATSAPP READY");
             console.log("Instancia:", instanceId);
+
+            //--------------------------------------------------
+            // Marcar presencia online — SIN esto, la simulación
+            // de "escribiendo..." (services/formateo.js,
+            // simularEscrituraHumana) llama a sendStateTyping()
+            // sin error, pero el contacto nunca ve el indicador
+            // del otro lado porque WhatsApp no muestra estados
+            // de presencia de una cuenta que nunca se anunció
+            // como disponible.
+            //--------------------------------------------------
+
+            try {
+
+                await client.sendPresenceAvailable();
+
+            }
+
+            catch (err) {
+
+                console.warn(
+
+                    "⚠ No se pudo marcar presencia disponible:",
+
+                    err.message
+
+                );
+
+            }
 
             //--------------------------------------------------
             // Obtener número correctamente
@@ -937,13 +933,17 @@ guardarInstancia(
 
                     numero: numeroWhatsApp
 
-                }
+                },
+
+                io
 
             );
 
             emitInstancesUpdate(
 
-                userId
+                userId,
+
+                io
 
             );
 
@@ -1043,7 +1043,9 @@ guardarInstancia(
 
             emitInstancesUpdate(
 
-                userId
+                userId,
+
+                io
 
             );
 
@@ -1276,30 +1278,33 @@ async function restaurarSesiones(io) {
 //==============================================================
 // EMISORES SOCKET
 //==============================================================
+//
+// Reemplazadas por services/socket-notifier.js — emiten por sala
+// (io.to('user_'+userId)) en vez de al Map userSockets de un
+// solo socket por usuario, así le llega a todas las pestañas
+// abiertas. Se mantienen estos wrappers con el mismo nombre para
+// no tener que tocar cada call site — simplemente delegan.
+//==============================================================
 
 function emitQr(
 
     userId,
 
-    payload
+    payload,
+
+    io
 
 ) {
 
-    const socket =
+    socketNotifier.emitQr(
 
-        userSockets.get(userId);
+        io,
 
-    if (socket) {
+        userId,
 
-        socket.emit(
+        payload
 
-            'qr',
-
-            payload
-
-        );
-
-    }
+    );
 
 }
 
@@ -1307,73 +1312,39 @@ function emitReady(
 
     userId,
 
-    payload
+    payload,
+
+    io
 
 ) {
 
-    const socket =
+    socketNotifier.emitReady(
 
-        userSockets.get(userId);
+        io,
 
-    if (socket) {
+        userId,
 
-        socket.emit(
+        payload
 
-            'whatsapp_ready',
-
-            payload
-
-        );
-
-    }
+    );
 
 }
 
 function emitInstancesUpdate(
 
-    userId
+    userId,
+
+    io
 
 ) {
 
-    const socket =
+    socketNotifier.emitInstancesUpdate(
 
-        userSockets.get(userId);
+        io,
 
-    if (!socket)
+        userId,
 
-        return;
-
-    const session =
-
-        sessions.get(userId);
-
-    if (!session)
-
-        return;
-
-    const lista =
-
-        [...session.instances.values()]
-
-            .map(inst => ({
-
-                id: inst.id,
-
-                numero:
-
-                    inst.numero || '',
-
-                listo:
-
-                    !!inst.listo
-
-            }));
-
-    socket.emit(
-
-        'instances_update',
-
-        lista
+        getUserInstancesResumen(userId)
 
     );
 
@@ -1553,6 +1524,42 @@ function getUserInstances(userId){
 
 }
 
+//==============================================================
+// RESUMEN DE INSTANCIAS (PARA SOCKET.IO)
+//==============================================================
+//
+// getUserInstances() devuelve el objeto "estado" completo por
+// instancia (contactosCargados, conversaciones, mensajesGuardados
+// — puede ser grande). Eso está bien para uso interno (routes/
+// views.js), pero mandarlo tal cual por socket.io hacía que el
+// chequeo interno de socket.io-parser (hasBinary, que recorre el
+// objeto recursivamente) reventara la pila: "RangeError: Maximum
+// call stack size exceeded" en cada conexión. Esta versión solo
+// expone los campos livianos que la UI necesita para listar
+// instancias — igual que el comportamiento original antes de
+// que getUserInstances empezara a incluir el estado completo.
+//==============================================================
+
+function getUserInstancesResumen(userId){
+
+    return getUserInstances(userId).map(
+
+        i => ({
+
+            id: i.id,
+
+            numero: i.numero || '',
+
+            listo: !!i.listo,
+
+            iniciada: i.iniciada !== false
+
+        })
+
+    );
+
+}
+
 function setActiveInstance(
 
     userId,
@@ -1725,6 +1732,8 @@ module.exports = {
     getUserSession,
 
     getUserInstances,
+
+    getUserInstancesResumen,
 
     getActiveInstanceId,
 

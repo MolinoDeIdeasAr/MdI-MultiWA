@@ -7,13 +7,22 @@
  *
  * Runner de campañas
  *
- * v1.1.0
+ * v1.2.0
  *
  * RESPONSABILIDAD:
  *   - Procesar un único contacto por ejecución.
  *   - Enviar mensaje.
  *   - Actualizar estado.
  *   - Devolver resultado.
+ *
+ * CHANGELOG v1.2.0:
+ *  • FIX CRÍTICO: {NOMBRE} en el mensaje nunca se reemplazaba
+ *    por el nombre real del contacto — procesarSpintax() lo
+ *    trataba como spintax de una sola opción y devolvía el
+ *    texto literal "NOMBRE". Ya existía obtenerNombre(contacto)
+ *    en este archivo pero no se llamaba desde ningún lado. Se
+ *    agregó reemplazarVariables() (NOMBRE y NUMERO) y se aplica
+ *    ANTES de procesarSpintax en el envío de campaña.
  *
  * CHANGELOG v1.1.0:
  *  • FIX CRÍTICO: run() usaba la variable "client" en el chequeo
@@ -32,6 +41,16 @@
 //==============================================================
 
 const sessionManager = require('./session-manager');
+
+const fs = require('fs');
+
+const path = require('path');
+
+const {
+
+    MessageMedia
+
+} = require('whatsapp-web.js');
 
 const antiBan = require('../config/anti-baneo');
 
@@ -540,17 +559,23 @@ async function enviarMensaje(
 
         const texto = procesarSpintax(
 
-            mensajes[
+            reemplazarVariables(
 
-                Math.floor(
+                mensajes[
 
-                    Math.random() *
+                    Math.floor(
 
-                    mensajes.length
+                        Math.random() *
 
-                )
+                        mensajes.length
 
-            ]
+                    )
+
+                ],
+
+                contacto
+
+            )
 
         );
 
@@ -573,16 +598,6 @@ async function enviarMensaje(
         //------------------------------------------------------
 
         if(estado.imagenGuardada){
-
-            const fs = require("fs");
-
-            const path = require("path");
-
-            const {
-
-                MessageMedia
-
-            } = require("whatsapp-web.js");
 
             const archivo = path.join(
 
@@ -649,62 +664,6 @@ async function enviarMensaje(
         }
 
         //------------------------------------------------------
-        // Audio opcional
-        //------------------------------------------------------
-
-        if(estado.audioGuardado){
-
-            const fs = require("fs");
-
-            const path = require("path");
-
-            const {
-
-                MessageMedia
-
-            } = require("whatsapp-web.js");
-
-            const archivo = path.join(
-
-                __dirname,
-
-                "..",
-
-                "uploads",
-
-                estado.audioGuardado
-
-            );
-
-            if(fs.existsSync(archivo)){
-
-                const media =
-
-                    MessageMedia.fromFilePath(
-
-                        archivo
-
-                    );
-
-                await client.sendMessage(
-
-                    destino,
-
-                    media,
-
-                    {
-
-                        sendAudioAsVoice:true
-
-                    }
-
-                );
-
-            }
-
-        }
-
-        //------------------------------------------------------
         // OK
         //------------------------------------------------------
 
@@ -714,7 +673,9 @@ async function enviarMensaje(
 
             estado,
 
-            contacto
+            contacto,
+
+            destino
 
         );
 
@@ -748,7 +709,9 @@ function marcarExito(
 
     estado,
 
-    contacto
+    contacto,
+
+    chatId
 
 ){
 
@@ -757,6 +720,19 @@ function marcarExito(
     contacto.fechaEnvio =
 
         new Date().toISOString();
+
+    // Guardamos el chatId real de WhatsApp (puede ser @c.us o
+    // @lid según cómo lo exponga WhatsApp para este contacto)
+    // junto al contacto de la planilla. Así, cuando responda —
+    // hoy o dentro de 6 meses — resolverContacto() lo reconoce
+    // por chatIdEnviado de una, sin depender de que WhatsApp nos
+    // devuelva el número real (con @lid a veces ni el propio
+    // WhatsApp lo expone, es una limitación de privacidad).
+    if(chatId){
+
+        contacto.chatIdEnviado = chatId;
+
+    }
 
     estado.actual++;
 
@@ -971,6 +947,58 @@ function obtenerNombre(contacto){
         ""
 
     );
+
+}
+
+//==============================================================
+// REEMPLAZAR VARIABLES ({NOMBRE}, {NUMERO}) EN EL MENSAJE
+//==============================================================
+//
+// obtenerNombre() ya existía pero nunca se llamaba desde ningún
+// lado — no había ningún paso que reemplazara {NOMBRE} por el
+// nombre real del contacto. procesarSpintax() se comía {NOMBRE}
+// como si fuera un bloque de spintax de una sola opción y
+// devolvía el texto literal "NOMBRE". Por eso hay que reemplazar
+// las variables ANTES de procesarSpintax, nunca después.
+//==============================================================
+
+function reemplazarVariables(texto, contacto){
+
+    if(!texto){
+
+        return texto;
+
+    }
+
+    const nombre =
+
+        obtenerNombre(contacto) || '';
+
+    const numero =
+
+        contacto.numero ||
+
+        contacto.NUMERO ||
+
+        '';
+
+    return texto
+
+        .replace(
+
+            /\{NOMBRE\}/gi,
+
+            nombre
+
+        )
+
+        .replace(
+
+            /\{NUMERO\}/gi,
+
+            numero
+
+        );
 
 }
 

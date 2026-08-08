@@ -63,9 +63,16 @@
     </div>
 
     <!-- ESTADO -->
+    <%
+        const activa = (instancias || []).find(i => i.id === activeId);
+    %>
     <% if (estado && estado.listo) { %>
         <div class="status-box status-online">
             ✅ WhatsApp Conectado<% if (estado.numeroWhatsApp) { %> — <%= estado.numeroWhatsApp %><% } %>
+        </div>
+    <% } else if (activa && activa.iniciada) { %>
+        <div class="status-box status-warning">
+            🔄 Conectando WhatsApp... <span style="font-size:12px;">(esto puede tardar unos segundos)</span>
         </div>
     <% } else if (instancias && instancias.length > 0) { %>
         <div class="status-box status-offline">
@@ -215,6 +222,10 @@
                 <label style="font-weight:bold;">Mensaje 3 (variante opcional)</label>
                 <textarea name="mensaje3" id="mensaje3" placeholder="Otra variante..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[2]) ? estado.mensajesGuardados[2] : '' %></textarea>
 
+                <label style="font-weight:bold;">Respuesta automática a "INFO" (opcional)</label>
+                <p style="font-size:12px; color:#666; margin:2px 0 6px;">Si un contacto escribe "info" (o "información", "más info"), le respondemos esto en vez del texto genérico. Dejalo vacío para usar el genérico.</p>
+                <textarea name="respuestaInfo" id="respuestaInfo" placeholder="Te cuento cómo trabajamos..."><%= estado.respuestaInfo || '' %></textarea>
+
                 <!-- IMAGEN -->
                 <div style="margin:15px 0;">
                     <label style="font-weight:bold;">🖼️ Imagen adjunta (opcional)</label>
@@ -224,7 +235,7 @@
                                  style="width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ced4da;"
                                  onerror="this.style.display='none'">
                             <div>
-                                <div style="font-size:13px; color:#333; margin-bottom:6px;">📎 <%= estado.imagenGuardada %></div>
+                                <div style="font-size:13px; color:#333; margin-bottom:6px;">📎 <%= estado.imagenGuardada.replace(/^\d+_/, '') %></div>
                                 <button type="button" onclick="borrarImagen()" class="btn btn-danger btn-sm">✕ Quitar imagen</button>
                             </div>
                         </div>
@@ -521,12 +532,16 @@ function cargarArchivo() {
         });
 }
 
-// ── Preview imagen ──
+// ── Preview + subida real de imagen ──
 var inputImagen = document.getElementById('input-imagen');
+var imagenUploadPromise = null; // lock: submit espera esto antes de iniciar campaña
+
 if (inputImagen) {
     inputImagen.addEventListener('change', function(e) {
         var file = e.target.files[0];
         if (!file) return;
+
+        // Preview local inmediata
         var reader = new FileReader();
         reader.onload = function(ev) {
             var img = document.getElementById('preview-img');
@@ -534,6 +549,33 @@ if (inputImagen) {
             img.style.display = 'block';
         };
         reader.readAsDataURL(file);
+
+        // Subida real al servidor
+        var fd = new FormData();
+        fd.append('imagen', file);
+        fd.append('instanceId', '<%= activeId %>');
+
+        imagenUploadPromise = fetch('/api/envio/imagen', {
+            method: 'POST',
+            body: fd
+        })
+        .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+        .then(function(r) {
+            if (!r.ok || !r.data.ok) {
+                throw new Error(r.data && r.data.error ? r.data.error : 'No se pudo subir la imagen');
+            }
+            console.log('✅ Imagen subida al servidor:', r.data.archivo);
+            mostrarMsg('✅ Imagen cargada (' + r.data.archivo + ')', 'ok');
+            return r.data;
+        })
+        .catch(function(err) {
+            console.error('❌ Error subiendo imagen:', err);
+            mostrarMsg('❌ Error al subir imagen: ' + err.message, 'err');
+            throw err;
+        })
+        .finally(function() {
+            imagenUploadPromise = null;
+        });
     });
 }
 
@@ -560,6 +602,14 @@ if (formEnvio) {
         msgEl.style.display = 'none';
 
         try{
+
+            // Si hay una imagen subiéndose todavía, esperar a que termine
+            // antes de arrancar la campaña (evita la carrera imagen vs iniciar).
+            if (imagenUploadPromise) {
+                btn.textContent = '⏳ Subiendo imagen...';
+                await imagenUploadPromise;
+                btn.textContent = '⏳ Iniciando campaña...';
+            }
 
             const res = await fetch('/api/envio/iniciar',{
 
@@ -624,12 +674,13 @@ setTimeout(()=>{
 
 }
 
-// ── Autoguardado de mensajes ──
+// ── Autoguardado de mensajes + respuesta a INFO ──
 function autoguardar() {
 
     const m1 = document.getElementById('mensaje1');
     const m2 = document.getElementById('mensaje2');
     const m3 = document.getElementById('mensaje3');
+    const respInfo = document.getElementById('respuestaInfo');
 
     if (!m1) return;
 
@@ -653,7 +704,9 @@ function autoguardar() {
 
                 m3 ? m3.value : ''
 
-            ]
+            ],
+
+            respuestaInfo: respInfo ? respInfo.value : ''
 
         })
 
@@ -662,7 +715,7 @@ function autoguardar() {
 }
 
 var timerGuardado;
-['mensaje1','mensaje2','mensaje3'].forEach(function(id) {
+['mensaje1','mensaje2','mensaje3','respuestaInfo'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', function() {
         clearTimeout(timerGuardado);

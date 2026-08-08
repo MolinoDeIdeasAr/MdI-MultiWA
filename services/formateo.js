@@ -60,15 +60,18 @@ async function simularEscrituraHumana(client, chatId, mensaje) {
 
         if (chat && typeof chat.sendStateTyping === 'function') {
             await chat.sendStateTyping();
+            console.log(`⌨ Escritura simulada OK -> ${chatId}`);
             await new Promise(r => setTimeout(r, tiempoEspera));
             // clearState puede no existir en v1.34.7, ignorar si falla
             try { await chat.clearState(); } catch (_) {}
         } else {
+            console.warn(`⚠ Sin sendStateTyping disponible para ${chatId} (chat=${!!chat}) — solo se espera el delay, sin indicador visual`);
             await new Promise(r => setTimeout(r, tiempoEspera));
         }
     } catch (e) {
-        // FIX: si falla getChatById (frecuente en v1.34.7), solo esperar el tiempo
-        // NO lanzar error — esto no debe bloquear el envío del mensaje
+        // FIX: no bloquear el envío del mensaje, pero SÍ loguear la causa real
+        // para poder diagnosticar por qué no se ve "escribiendo..." del lado del contacto
+        console.warn(`⚠ simularEscrituraHumana falló para ${chatId}: ${e.message} — se espera el delay igual, sin indicador visual`);
         await new Promise(r => setTimeout(r, Math.min(tiempoEspera, 5000)));
     }
 }

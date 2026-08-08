@@ -105,45 +105,6 @@ router.post('/guardar-imagen', async (req, res) => {
     }
 });
 
-// Guardar audio
-router.post('/guardar-audio', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const instanceId = sessionManager.getActiveInstanceId(userId);
-        
-        if (!instanceId) {
-            return res.status(400).json({ error: 'No hay instancia activa' });
-        }
-        
-        if (!req.files || !req.files.audio) {
-            return res.status(400).json({ error: 'No se envió ningún audio' });
-        }
-        
-        const audio = req.files.audio;
-        const nombreArchivo = `${Date.now()}_${audio.name}`;
-        const rutaArchivo = path.join(UPLOADS_DIR, nombreArchivo);
-        await audio.mv(rutaArchivo);
-        
-        let estado = cargarEstado(instanceId) || {};
-        estado.audioGuardado = nombreArchivo;
-        guardarEstado(estado, instanceId);
-        
-        const userSession = sessionManager.getUserSession(userId);
-        if (userSession) {
-            const instancia = userSession.instances.get(instanceId);
-            if (instancia) {
-                instancia.estado = estado;
-                sessionManager.guardarInstancia(userId, instanceId, instancia);
-            }
-        }
-        
-        res.json({ success: true, archivo: nombreArchivo });
-    } catch (error) {
-        console.error('Error guardando audio:', error);
-        res.status(500).json({ error: 'Error al guardar audio' });
-    }
-});
-
 // Eliminar imagen
 router.post('/borrar-imagen', async (req, res) => {
     try {
@@ -169,34 +130,6 @@ router.post('/borrar-imagen', async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ error: 'Error al eliminar imagen' });
-    }
-});
-
-// Eliminar audio
-router.post('/borrar-audio', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const instanceId = sessionManager.getActiveInstanceId(userId);
-        
-        if (!instanceId) {
-            return res.status(400).json({ error: 'No hay instancia activa' });
-        }
-        
-        const userSession = sessionManager.getUserSession(userId);
-        if (userSession) {
-            const instancia = userSession.instances.get(instanceId);
-            if (instancia && instancia.estado && instancia.estado.audioGuardado) {
-                const ruta = path.join(UPLOADS_DIR, instancia.estado.audioGuardado);
-                if (fs.existsSync(ruta)) fs.unlinkSync(ruta);
-                instancia.estado.audioGuardado = null;
-                guardarEstado(instancia.estado, instanceId);
-            }
-        }
-        
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: 'Error al eliminar audio' });
     }
 });
 
