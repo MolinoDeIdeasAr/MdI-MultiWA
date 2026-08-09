@@ -492,7 +492,83 @@ function getEstado(userId) {
 // START SESSION
 //==============================================================
 
+//==============================================================
+// SEGURO CONTRA startSession() CONCURRENTES
+//==============================================================
+//
+// Si dos cosas llaman a startSession() para la MISMA instancia
+// casi al mismo tiempo (ej: la restauración automática del boot
+// y una visita a la página que dispara iniciarSiNecesario), el
+// segundo llamado veía "ya existe el cliente" y lo destruía para
+// crear uno nuevo — a mitad de un envío en curso, si justo
+// estaba mandando un mensaje. Eso rompía el Frame de Puppeteer
+// ("Attempted to use detached Frame") en pleno envío. Ahora, si
+// ya hay un startSession en curso para esa instancia, los
+// llamados siguientes esperan ESA misma promesa en vez de
+// arrancar uno en paralelo.
+//==============================================================
+
+const inicializacionesEnCurso = new Map();
+
 async function startSession(
+
+    userId,
+
+    io,
+
+    instanceId
+
+) {
+
+    if (
+
+        inicializacionesEnCurso.has(instanceId)
+
+    ) {
+
+        console.log(
+
+            `⏳ startSession(${instanceId}) ya en curso — esperando esa misma inicialización`
+
+        );
+
+        return inicializacionesEnCurso.get(instanceId);
+
+    }
+
+    const promesa =
+
+        startSessionInterno(
+
+            userId,
+
+            io,
+
+            instanceId
+
+        ).finally(() => {
+
+            inicializacionesEnCurso.delete(
+
+                instanceId
+
+            );
+
+        });
+
+    inicializacionesEnCurso.set(
+
+        instanceId,
+
+        promesa
+
+    );
+
+    return promesa;
+
+}
+
+async function startSessionInterno(
 
     userId,
 
@@ -730,7 +806,51 @@ guardarInstancia(
 
                 console.log(
 
-                    `⚠ Máximo de QR alcanzado (${instanceId})`
+                    `⚠ Máximo de QR alcanzado (${instanceId}) — cerrando cliente para liberar recursos`
+
+                );
+
+                // FIX: antes esto solo hacía "return" y quedaba
+                // así para siempre — el cliente de WhatsApp (y su
+                // Chrome) seguía vivo, WhatsApp seguía rotando el
+                // QR cada rato, y el 'qr' event volvía a disparar
+                // este mismo log sin parar, gastando RAM por una
+                // instancia que nadie va a escanear. Ahora se
+                // destruye el cliente de una vez.
+
+                try {
+
+                    await gracefulDestroy(
+
+                        client
+
+                    );
+
+                }
+
+                catch (err) {
+
+                    console.warn(
+
+                        `⚠ Error cerrando cliente tras máximo de QR (${instanceId}):`,
+
+                        err.message
+
+                    );
+
+                }
+
+                clients.delete(
+
+                    instanceId
+
+                );
+
+                emitInstancesUpdate(
+
+                    userId,
+
+                    io
 
                 );
 
@@ -1195,7 +1315,7 @@ async function removeInstance(
 // Ajustar según la RAM disponible de la máquina.
 //==============================================================
 
-const MAX_INSTANCIAS_AUTO_RESTAURADAS = 2;
+const MAX_INSTANCIAS_AUTO_RESTAURADAS = 6;
 
 async function restaurarSesiones(io) {
 
@@ -1220,6 +1340,32 @@ async function restaurarSesiones(io) {
             continue;
 
         for (const instancia of instancias) {
+
+            //----------------------------------------------------------
+            // Si ya está corriendo (arrancada por otro camino —
+            // login, iniciarSiNecesario, etc. — mientras este loop
+            // todavía no había llegado a ella), NO reiniciarla acá.
+            // startSession() siempre destruye+recrea si ya existe
+            // el cliente, así que sin este chequeo, restaurarSesiones
+            // podía matar una instancia en pleno envío de campaña
+            // ("Attempted to use detached Frame").
+            //----------------------------------------------------------
+
+            if (
+
+                clients.has(instancia.id)
+
+            ) {
+
+                console.log(
+
+                    `↪ "${instancia.id}" ya está corriendo — se salta en la restauración`
+
+                );
+
+                continue;
+
+            }
 
             if (
 

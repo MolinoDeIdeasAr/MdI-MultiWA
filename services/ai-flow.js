@@ -1,5 +1,15 @@
 'use strict';
 
+// v1.1.0
+//
+// CHANGELOG v1.1.0:
+//  • FIX CRÍTICO: notification-service.js existía completo y
+//    funcional, pero nunca se llamaba desde ningún lado — el
+//    aviso al celular del usuario logueado nunca se disparaba,
+//    aunque context.debeNotificarAsesor estuviera en true (ej:
+//    alguien responde "INFO"). Se agregó notificarAsesor(),
+//    llamado en procesar() después de enviarRespuesta().
+
 //==============================================================
 // DEPENDENCIAS
 //==============================================================
@@ -7,6 +17,8 @@
 const crmFlow = require('./crm-flow');
 
 const aiEngine = require('../core/ai/ai-engine');
+
+const notificationService = require('./notification-service');
 
 const logger = require('../core/logger/logger');
 
@@ -108,6 +120,24 @@ class AIFlow {
         }
 
         //------------------------------------------------------
+        // Notificar al asesor (celular del usuario logueado)
+        //------------------------------------------------------
+        //
+        // FIX: notificationService.notificar() existía y estaba
+        // completo, pero nunca se llamaba desde ningún lado —
+        // por eso el aviso nunca llegaba aunque
+        // context.debeNotificarAsesor estuviera en true. El
+        // propio servicio ya chequea internamente
+        // debeNotificarAsesor, así que es seguro llamarlo
+        // siempre acá; si no corresponde notificar, no hace nada.
+
+        await this.notificarAsesor(
+
+            context
+
+        );
+
+        //------------------------------------------------------
         // Registrar baja
         //------------------------------------------------------
 
@@ -126,6 +156,40 @@ class AIFlow {
         }
 
         return context;
+
+    }
+
+    //----------------------------------------------------------
+    // NOTIFICAR ASESOR
+    //----------------------------------------------------------
+
+    async notificarAsesor(
+
+        context
+
+    ) {
+
+        try {
+
+            await notificationService.notificar(
+
+                context
+
+            );
+
+        }
+
+        catch (err) {
+
+            logger.error(
+
+                'Error notificando al asesor',
+
+                err
+
+            );
+
+        }
 
     }
 

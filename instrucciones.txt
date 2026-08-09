@@ -1,0 +1,35 @@
+ENTORNO DE EJECUCIÓN — CRÍTICO
+==============================
+
+ESTE PROYECTO SE EJECUTA EN WINDOWS.
+
+El sistema operativo NO es Linux.
+
+El shell utilizado por OpenCode es PowerShell/CMD.
+
+REGLA ABSOLUTA:
+
+NUNCA ejecutar comandos Linux/Bash.
+
+Está PROHIBIDO utilizar:
+
+ls
+grep
+head
+tail
+cat
+sed
+awk
+find
+xargs
+chmod
+rm
+cp
+mv
+which
+pwd
+2>/dev/null
+/dev/null
+||
+&&
+$(...)

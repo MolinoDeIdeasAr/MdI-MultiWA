@@ -1,0 +1,114 @@
+TAREA: CORREGIR NOTIFICACIÓN "INFO"
+
+Lee primero instrucciones.txt y respeta todas sus reglas.
+
+OBJETIVO
+
+Cuando un contacto responde "INFO", el sistema debe:
+
+1. Recibir el mensaje "INFO".
+2. Detectar la intención "solicitud_info".
+3. Enviar la respuesta automática al contacto.
+4. Notificar al celular del usuario logueado.
+5. La notificación debe enviarse utilizando el mecanismo existente de notification-service.js.
+
+DIAGNÓSTICO PREVIO
+
+Se realizó una auditoría del código y se encontró lo siguiente:
+
+- core/ai/ai-rules.js detecta correctamente "INFO".
+- La intención generada es "solicitud_info".
+- services/conversation-context.js establece correctamente:
+  
+  debeNotificarAsesor = true
+
+  cuando la intención es "solicitud_info".
+
+- services/notification-service.js contiene la función:
+  
+  notificationService.notificar(context)
+
+- notification-service.js utiliza context.userId para identificar al usuario y obtener su número de notificación.
+- notification-service.js utiliza context.client para realizar el envío.
+- El problema detectado es que services/ai-flow.js no llama a notificationService.notificar(context) después de enviar la respuesta automática.
+
+TRABAJO
+
+1. Verifica nuevamente este diagnóstico en el código actual antes de modificar nada.
+
+2. Si el diagnóstico es correcto, modifica ÚNICAMENTE:
+
+services/ai-flow.js
+
+3. Importa notification-service.js utilizando la ruta correcta según la ubicación real del archivo.
+
+4. Después de:
+
+await this.enviarRespuesta(context);
+
+debe ejecutarse:
+
+if (context.debeNotificarAsesor) {
+    await notificationService.notificar(context);
+}
+
+5. La notificación solamente debe ejecutarse cuando:
+   
+context.debeNotificarAsesor === true
+
+ARCHIVOS QUE NO DEBEN MODIFICARSE
+
+NO modificar:
+
+- core/ai/ai-rules.js
+- core/ai/ai-engine.js
+- services/conversation-context.js
+- services/notification-service.js
+- services/inbound-message-handler.js
+- services/session-manager.js
+
+NO modificar ningún otro archivo.
+
+RESTRICCIONES
+
+- No hacer refactorización.
+- No reorganizar la arquitectura.
+- No cambiar reglas de IA.
+- No crear otro sistema de notificaciones.
+- No crear otra instancia de WhatsApp.
+- No crear otro cliente whatsapp-web.js.
+- No cambiar la forma en que se identifica al usuario.
+- No cambiar users.json.
+- No cambiar la persistencia.
+- No cambiar Socket.IO.
+- No enviar mensajes reales de prueba.
+- No iniciar campañas.
+
+VALIDACIÓN
+
+Después de realizar el cambio:
+
+1. Verificar la sintaxis de services/ai-flow.js.
+2. Verificar que el require/import de notification-service.js sea correcto.
+3. Verificar que notificationService.notificar exista.
+4. Verificar que context.debeNotificarAsesor esté disponible en el punto donde se realiza la llamada.
+5. Verificar que no se haya modificado ningún otro archivo.
+
+INFORME FINAL
+
+Informar:
+
+ARCHIVO MODIFICADO:
+FUNCIÓN MODIFICADA:
+CAMBIO REALIZADO:
+MOTIVO:
+ARCHIVOS NO MODIFICADOS:
+VALIDACIÓN REALIZADA:
+
+No afirmar que el problema está completamente solucionado hasta realizar una prueba real del flujo.
+
+La prueba posterior deberá ser:
+
+CONTACTO → "INFO"
+→ respuesta automática
+→ notificación al celular del usuario logueado
