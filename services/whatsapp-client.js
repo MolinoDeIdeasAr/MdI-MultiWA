@@ -95,17 +95,35 @@ async function esperarHastaHorarioValido(esHorarioValido, CONFIG) {
 
 async function gracefulDestroyClient(client) {
     if (!client) return;
+    
+    // 1. Cerrar forzosamente el navegador de Puppeteer (client.pupBrowser)
+    // Esto libera los archivos .db-journal que Windows bloquea.
     try {
-        if (client.puppeteer && client.puppeteer.browser) {
+        if (client.pupBrowser) {
+            await client.pupBrowser.close();
+            console.log('✅ Navegador (pupBrowser) cerrado');
+        } else if (client.puppeteer && client.puppeteer.browser) {
             await client.puppeteer.browser.close();
             console.log('✅ Navegador cerrado');
         }
     } catch (err) {
         console.warn('⚠️ Error cerrando navegador:', err.message);
     }
+
+    // 2. Pequeña pausa para que Windows termine de liberar los locks de los archivos
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 3. Destruir el cliente (esto dispara LocalAuth.logout internamente)
+    // Capturamos el error para evitar el "Unhandled Rejection" si falla por EBUSY
     try {
         if (typeof client.destroy === 'function') {
-            await client.destroy();
+            await client.destroy().catch(e => {
+                if (e.message && e.message.includes('EBUSY')) {
+                    console.warn('⚠️ Ignorado EBUSY al destruir cliente (Windows lock)');
+                } else {
+                    console.warn('⚠️ Error en destroy:', e.message);
+                }
+            });
             console.log('✅ Cliente destruido');
         }
     } catch (err) {

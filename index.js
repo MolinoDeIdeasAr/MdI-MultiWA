@@ -45,6 +45,26 @@ const scheduler =
 const { setupSockets } =
     require('./sockets/conversations');
 
+// ============================================================
+// MANEJO GLOBAL DE ERRORES (Previene crashes por EBUSY en Windows)
+// ============================================================
+process.on('unhandledRejection', (reason, promise) => {
+    if (reason && reason.message && reason.message.includes('EBUSY')) {
+        // Esto es normal en Windows cuando whatsapp-web.js intenta borrar la sesión
+        // mientras Chromium aún está cerrando. Lo ignoramos para que no rompa el proceso.
+        console.warn('⚠️ [Global] Ignorado error EBUSY de LocalAuth (Windows lock en sesión)');
+        return;
+    }
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+    if (err.message && err.message.includes('EBUSY')) {
+        console.warn('⚠️ [Global] Ignorado error EBUSY de LocalAuth (Windows lock en sesión)');
+        return;
+    }
+    console.error('❌ Uncaught Exception:', err);
+});
 
 //==============================================================
 // RUTAS

@@ -18,6 +18,8 @@
 
 const runner = require('./campaign-runner');
 
+const { generarDelayHumano } = require('./formateo');
+
 const {
     STATUS,
     getScheduler,
@@ -361,7 +363,13 @@ async function ejecutar(instanceId) {
 
         guardarEstadoSeguro(instanceId);
 
-        const pausa = resultado.pausa || 1000;
+        // DELAY HUMANO: en vez de 1000ms fijo, usamos tiempo variable
+        const estado = getEstadoInstancia(instanceId);
+        const pausa = estado && estado.total
+            ? generarDelayHumano(estado.actual, estado.total)
+            : (resultado.pausa || 45000);
+
+        console.log('⏱️ Próximo envío en ' + Math.floor(pausa / 1000) + 's');
 
         actualizarScheduler(instanceId, {
 
