@@ -159,9 +159,28 @@ class ConversationContext {
         this.debeResponderIA =
             Boolean(this.respuestaIA);
 
+        // FIX CRÍTICO: esto comparaba this.intencionIA contra
+        // 'solicitud_humano', pero la regla que deriva a un
+        // humano (ai-rules.js) en realidad devuelve intencion:
+        // 'hablar_humano' — nunca coincidían, así que pedir
+        // hablar con un asesor ("ASESOR", "HUMANO", "LLAMAME",
+        // etc.) NUNCA disparaba la notificación push, aunque
+        // ai-rules.js sí lo marca explícitamente con
+        // notificarHumano:true en el análisis.
+        //
+        // También comparaba contra 'solicitud_info', pero
+        // ai-rules.js marca esa intención con notificarHumano:
+        // false a propósito (el bot ya contesta solo con la
+        // info, no hace falta avisarle a nadie) — mantener esa
+        // comparación habría notificado de más.
+        //
+        // Tanto ai-rules.js como el camino de Gemini
+        // (ai-engine.js) ya calculan y exponen el flag
+        // notificarHumano — hay que usarlo directo en vez de
+        // reinventar la condición acá con strings sueltos que
+        // terminan desincronizados de las reglas reales.
         this.debeNotificarAsesor =
-            this.intencionIA === 'solicitud_info' ||
-            this.intencionIA === 'solicitud_humano';
+            Boolean(analisis?.notificarHumano);
 
         this.debeRegistrarBaja =
             this.estadoIA === 'cerrado_perdido' ||

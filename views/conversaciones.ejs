@@ -132,6 +132,7 @@
                         <span class="conversacion-nombre"><%= conv.nombre || 'Desconocido' %></span>
                         <span class="conversacion-numero">📞 <%= conv.numero || '-' %></span>
                         <span class="origen-badge">📲 Desde: <%= conv.origenNumero || 'desconocido' %></span>
+                        <% if (conv.rubro) { %><span class="origen-badge">🏷️ <%= conv.rubro %></span><% } %>
                     </div>
                     <span><%= conv.fecha || '' %></span>
                 </div>
@@ -196,6 +197,7 @@
                     <span class="conversacion-nombre">${escapeHtml(conv.nombre || 'Desconocido')}</span>
                     <span class="conversacion-numero">📞 ${escapeHtml(conv.numero || '-')}</span>
                     <span class="origen-badge">📲 Desde: ${escapeHtml(origen)}</span>
+                    ${conv.rubro ? `<span class="origen-badge">🏷️ ${escapeHtml(conv.rubro)}</span>` : ''}
                 </div>
                 <span>${escapeHtml(conv.fecha || '')}</span>
             </div>

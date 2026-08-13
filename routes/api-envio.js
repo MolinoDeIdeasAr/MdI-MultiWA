@@ -33,6 +33,8 @@ const express = require('express');
 const router = express.Router();
 
 const path = require('path');
+
+const fs = require('fs');
 const multer = require('multer');
 
 const sessionManager =
@@ -417,6 +419,67 @@ router.post(
                     error:'Estado inexistente'
 
                 });
+
+            }
+
+            //--------------------------------------------------
+            // Borrar la imagen anterior del disco si había una
+            // distinta — si no, cada reemplazo deja un archivo
+            // huérfano en uploads/ para siempre (multer siempre
+            // genera un nombre nuevo con timestamp).
+            //--------------------------------------------------
+
+            if(
+
+                estado.imagenGuardada &&
+
+                estado.imagenGuardada !== req.file.filename
+
+            ){
+
+                const anterior =
+
+                    path.join(
+
+                        __dirname,
+
+                        '..',
+
+                        'uploads',
+
+                        estado.imagenGuardada
+
+                    );
+
+                try{
+
+                    if(
+
+                        fs.existsSync(anterior)
+
+                    ){
+
+                        fs.unlinkSync(
+
+                            anterior
+
+                        );
+
+                    }
+
+                }
+
+                catch(err){
+
+                    console.warn(
+
+                        `⚠ No se pudo borrar imagen anterior (${instanceId}):`,
+
+                        err.message
+
+                    );
+
+                }
 
             }
 

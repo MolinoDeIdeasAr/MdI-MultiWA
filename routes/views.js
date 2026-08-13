@@ -112,10 +112,36 @@ router.get('/monitor', async (req, res) => {
     try {
         const userId = req.session.userId;
         const instancias = sessionManager.getUserInstances(userId);
-        // FIX: la variable se llama activeId en toda la app, no activeInstanceId
-        const activeId = sessionManager.getActiveInstanceId(userId);
 
-        let estado = sessionManager.getEstado(userId);
+        // FIX: el selector de instancia recarga como
+        // /monitor?instanceId=... (y el polling de
+        // /api/monitor/progreso ya respeta ese query param), pero
+        // esta ruta lo ignoraba por completo y siempre usaba la
+        // instancia "activa global" de la sesión — por eso el
+        // título (con el rubro) no correspondía a la instancia
+        // que en realidad estabas mirando. Si viene por query Y
+        // es una instancia del usuario logueado, se usa esa; si
+        // no, se cae a la activa de siempre (nunca se acepta un
+        // instanceId de otro usuario).
+        const idsPropios =
+            new Set(instancias.map(i => i.id));
+
+        const activeId =
+            (
+                req.query.instanceId &&
+                idsPropios.has(req.query.instanceId)
+            )
+                ? req.query.instanceId
+                : sessionManager.getActiveInstanceId(userId);
+
+        let estado =
+            activeId
+
+                ? sessionManager.getUserSession(userId)
+                      ?.instances.get(activeId)
+                      ?.estado
+
+                : null;
 
         if (!estado && activeId) {
             estado = cargarEstado(activeId);
@@ -228,25 +254,33 @@ router.post('/nueva-instancia', async (req, res) => {
 router.get('/conversaciones', async (req, res) => {
     try {
         const userId = req.session.userId;
-        const activeId = sessionManager.getActiveInstanceId(userId);
         let conversaciones = [];
 
-        // Leer conversaciones del estado de la instancia activa
-        if (activeId) {
-            const s = sessionManager.getUserSession(userId);
-            if (s) {
-                const inst = s.instances.get(activeId);
-                if (inst && inst.estado && inst.estado.conversaciones) {
-                    conversaciones = inst.estado.conversaciones;
-                } else {
-                    // Intentar cargar desde disco
-                    const estadoDisco = cargarEstado(activeId);
-                    if (estadoDisco && estadoDisco.conversaciones) {
-                        conversaciones = estadoDisco.conversaciones;
-                    }
-                }
-            }
+        // FIX: antes solo mostraba las conversaciones de la
+        // instancia ACTIVA — si te respondían en otra cuenta
+        // (de las hasta 6 que puede haber conectadas), la
+        // respuesta se guardaba bien pero nunca se veía en esta
+        // pantalla hasta cambiar de instancia activa a mano.
+        // Ahora se juntan las de TODAS las instancias del
+        // usuario (cada conversación ya trae "origenNumero"
+        // para poder distinguir de qué cuenta vino).
+        const instancias = sessionManager.getUserInstances(userId);
+
+        for (const inst of instancias) {
+            const convsInstancia =
+                inst.estado?.conversaciones ||
+                cargarEstado(inst.id)?.conversaciones ||
+                [];
+
+            conversaciones = conversaciones.concat(convsInstancia);
         }
+
+        // Más recientes primero
+        conversaciones.sort((a, b) => {
+            const fa = new Date(a.fecha).getTime() || 0;
+            const fb = new Date(b.fecha).getTime() || 0;
+            return fb - fa;
+        });
 
         res.render('conversaciones', { conversaciones });
     } catch (error) {

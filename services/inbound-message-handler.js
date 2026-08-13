@@ -230,6 +230,10 @@ async function handleInboundMessage({
 
                 numeroInstancia || '',
 
+            rubro:
+
+                context.estadoTemporal?.rubro || '',
+
             fecha:
 
                 context.fecha.toLocaleString('es-AR'),

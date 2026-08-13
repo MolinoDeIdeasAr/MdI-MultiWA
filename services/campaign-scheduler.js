@@ -26,7 +26,8 @@ const {
 } = require('../state/scheduler-state');
 
 const {
-    guardarEstadoSeguro
+    guardarEstadoSeguro,
+    getEstadoInstancia
 } = require('../state/estado');
 
 //==============================================================
@@ -56,6 +57,56 @@ function init(socketIO) {
 function getIO() {
 
     return io;
+
+}
+
+//==============================================================
+// GET STATUS
+//==============================================================
+//
+// FIX: routes/api-monitor.js llama a scheduler.getStatus(id) para
+// armar la sección "scheduler" del monitor — esta función no
+// existía (el archivo solo exportaba init/getIO/iniciar/detener/
+// restaurarCampañas/shutdown), así que el monitor siempre recibía
+// "{}" acá y todo salía en blanco (estado, próximo envío, etc.).
+// Combina el estado real del scheduler (state/scheduler-state.js)
+// con el progreso de la campaña (state/estado.js) — son fuentes
+// separadas, el monitor necesita las dos juntas.
+//==============================================================
+
+function getStatus(instanceId) {
+
+    const sch = getScheduler(instanceId);
+
+    const estado = getEstadoInstancia(instanceId);
+
+    const contactoActual =
+
+        estado?.contactosCargados?.[estado.actual]?.nombre || '';
+
+    return {
+
+        status: sch?.status || STATUS.IDLE,
+
+        actual: estado?.actual ?? 0,
+
+        total: estado?.total ?? 0,
+
+        mensajeActual: '',
+
+        contactoActual,
+
+        // el objeto del scheduler usa "proximoEnvio" — el
+        // monitor espera "nextRun", se mapea acá
+        nextRun: sch?.proximoEnvio || null,
+
+        motivo: sch?.motivo || '',
+
+        pausaHasta: sch?.pausaHasta || null,
+
+        finalizado: sch?.finalizado || null
+
+    };
 
 }
 
@@ -151,8 +202,28 @@ async function ejecutar(instanceId) {
     //----------------------------------------------------------
     // ¿Sigue corriendo?
     //----------------------------------------------------------
+    //
+    // FIX CRÍTICO: antes chequeaba "!== STATUS.RUNNING" — pero
+    // cuando el runner pausa por límite de antiban, ESTA MISMA
+    // función pone status: WAITING_TIME antes de programar el
+    // reintento (más abajo). Cuando el timer dispara y vuelve a
+    // llamar a ejecutar(), este chequeo veía WAITING_TIME (no
+    // RUNNING) y cancelaba el timer sin hacer nada — el
+    // scheduler nunca retomaba después de una pausa por antiban,
+    // ni una vez. Solo se debe frenar en estados realmente
+    // terminales (detenido/finalizado/error) — RUNNING y
+    // WAITING_TIME son ambos estados válidos para seguir.
 
-    if (scheduler.status !== STATUS.RUNNING) {
+    const ESTADOS_DETENIDOS = [
+
+        STATUS.STOPPED,
+        STATUS.FINISHED,
+        STATUS.ERROR,
+        STATUS.IDLE
+
+    ];
+
+    if (ESTADOS_DETENIDOS.includes(scheduler.status)) {
 
         if (timers.has(instanceId)) {
 
@@ -444,6 +515,8 @@ module.exports = {
     init,
 
     getIO,
+
+    getStatus,
 
     iniciar,
 

@@ -288,6 +288,7 @@ tbody tr:hover{
 <h1>
 
 📊 Monitor de Campañas
+<% if (estado && estado.rubro) { %> · <%= estado.rubro %><% } %>
 
 </h1>
 
@@ -898,7 +899,23 @@ async function actualizar(){
 
                 <td>${c.estadoEnvio}</td>
 
-                <td>${c.fechaEnvio || '-'}</td>
+                <td>${
+                    c.fechaEnvio
+                        ? new Date(c.fechaEnvio).toLocaleString(
+                            'es-AR',
+                            {
+                                timeZone: 'America/Argentina/Buenos_Aires',
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false
+                            }
+                        )
+                        : '-'
+                }</td>
 
             </tr>`;
 

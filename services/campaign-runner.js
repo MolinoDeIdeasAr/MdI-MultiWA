@@ -58,6 +58,8 @@ const { esBaja } = require('./bajas');
 
 const {
 
+    formatearNumeroWhatsApp,
+
     procesarSpintax,
 
     simularEscrituraHumana
@@ -279,7 +281,16 @@ async function procesarContacto(
     // Número
     //----------------------------------------------------------
 
-    const numero = String(
+    // FIX CRÍTICO: acá solo se limpiaban los caracteres no
+    // numéricos, pero nunca se aplicaba formatearNumeroWhatsApp()
+    // (que agrega 549 y saca el 0 inicial + el "15" de marcación
+    // móvil local). Un número cargado en formato local, ej.
+    // "0351152074696", se pasaba tal cual a client.getNumberId()
+    // más abajo, que necesita el formato internacional puro.
+    // WhatsApp no lo reconocía y TODOS los envíos con números en
+    // formato local caían como "Número inexistente" / fallido,
+    // aunque el número fuera válido.
+    const numero = formatearNumeroWhatsApp(
 
         contacto.numero ||
 
@@ -287,7 +298,7 @@ async function procesarContacto(
 
         ""
 
-    ).replace(/\D/g,"");
+    );
 
     console.log("Número:", numero);
 
@@ -349,7 +360,9 @@ async function procesarContacto(
 
     const horarioOK = antiBan.esHorarioValido();
 
-    console.log("Horario:", horarioOK);
+    console.log("Horario:", horarioOK,
+        "| Hora que ve Node:", new Date().getHours() + "hs",
+        "| Fecha/hora completa:", new Date().toString());
 
     if(!horarioOK){
 
@@ -381,11 +394,13 @@ async function procesarContacto(
 
     const puedeEnviar = antiBan.puedeEnviarMas(instanceId);
 
-    console.log("puedeEnviar =", puedeEnviar);
+    console.log("puedeEnviar =", puedeEnviar,
+        "| MAX_MENSAJES_HORA:", antiBan.CONFIG.MAX_MENSAJES_HORA,
+        "| MAX_MENSAJES_DIA:", antiBan.CONFIG.MAX_MENSAJES_DIA);
 
     if(!puedeEnviar){
 
-        console.log("⏸ Límite antiban alcanzado");
+        console.log("⏸ Límite antiban alcanzado:", antiBan.obtenerMotivoPausa(instanceId));
 
         return {
 
@@ -743,6 +758,16 @@ function marcarExito(
     estado.campanaFinalizada = false;
 
     antiBan.incrementarMensajesHoy(
+
+        instanceId
+
+    );
+
+    // FIX: faltaba esta llamada — sin ella, el límite de
+    // mensajes-por-hora (MAX_MENSAJES_HORA) nunca se aplicaba de
+    // verdad, porque puedeEnviarMas() siempre veía el contador
+    // horario en 0.
+    antiBan.incrementarMensajesHora(
 
         instanceId
 

@@ -20,7 +20,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>📋 Cargar Contactos</h1>
+    <h1>📋 Cargar Contactos<% if (typeof estado !== 'undefined' && estado && estado.rubro) { %> · <%= estado.rubro %><% } %></h1>
     
     <div class="tabs">
         <button class="tab active" onclick="cambiarTab('drive')">📱 Google Drive</button>

@@ -101,7 +101,8 @@ const {
 
     getEstadoInstancia,
     actualizarEstado,
-    guardarEstadoSeguro
+    guardarEstadoSeguro,
+    eliminarEstadoMemoria
 
 } = require('../state/estado');
 
@@ -1287,9 +1288,177 @@ async function removeInstance(
 
     }
 
+    //----------------------------------------------------------
+    // Limpiar archivos en disco — antes solo se borraba la
+    // entrada de instancias.json, y quedaban huérfanos para
+    // siempre: la carpeta de sesión de Chrome/WhatsApp
+    // (sessions/session-<id>, puede pesar bastante por los
+    // datos de perfil de Chrome), el estado persistido
+    // (data/estado_<id>.json), y la imagen de campaña asociada
+    // (uploads/<archivo>) si tenía una.
+    //----------------------------------------------------------
+
+    try {
+
+        const estado =
+
+            getEstadoInstancia(
+
+                instanceId
+
+            );
+
+        if (
+
+            estado?.imagenGuardada
+
+        ) {
+
+            const rutaImagen =
+
+                path.join(
+
+                    __dirname,
+
+                    '..',
+
+                    'uploads',
+
+                    estado.imagenGuardada
+
+                );
+
+            if (
+
+                fs.existsSync(rutaImagen)
+
+            ) {
+
+                fs.unlinkSync(
+
+                    rutaImagen
+
+                );
+
+            }
+
+        }
+
+    }
+
+    catch (err) {
+
+        console.warn(
+
+            `⚠ No se pudo borrar la imagen de campaña (${instanceId}):`,
+
+            err.message
+
+        );
+
+    }
+
+    try {
+
+        const rutaEstado =
+
+            path.join(
+
+                __dirname,
+
+                '..',
+
+                'data',
+
+                `estado_${instanceId}.json`
+
+            );
+
+        if (
+
+            fs.existsSync(rutaEstado)
+
+        ) {
+
+            fs.unlinkSync(
+
+                rutaEstado
+
+            );
+
+        }
+
+    }
+
+    catch (err) {
+
+        console.warn(
+
+            `⚠ No se pudo borrar estado_${instanceId}.json:`,
+
+            err.message
+
+        );
+
+    }
+
+    try {
+
+        const rutaSesion =
+
+            path.join(
+
+                SESSIONS_DIR,
+
+                `session-${instanceId}`
+
+            );
+
+        if (
+
+            fs.existsSync(rutaSesion)
+
+        ) {
+
+            fs.rmSync(
+
+                rutaSesion,
+
+                {
+
+                    recursive: true,
+
+                    force: true
+
+                }
+
+            );
+
+        }
+
+    }
+
+    catch (err) {
+
+        console.warn(
+
+            `⚠ No se pudo borrar la carpeta de sesión (${instanceId}):`,
+
+            err.message
+
+        );
+
+    }
+
     eliminarInstancia(
 
         userId,
+
+        instanceId
+
+    );
+
+    eliminarEstadoMemoria(
 
         instanceId
 
