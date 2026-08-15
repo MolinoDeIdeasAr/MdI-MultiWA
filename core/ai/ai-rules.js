@@ -184,7 +184,7 @@ function analizarReglas(
 
                 RESPUESTAS.diagnostico,
 
-            notificarHumano: false,
+            notificarHumano: true,
 
             numeroLimpio: numero
 
@@ -232,7 +232,7 @@ function analizarReglas(
 
                 RESPUESTAS.info,
 
-            notificarHumano: false,
+            notificarHumano: true,
 
             numeroLimpio: numero
 
@@ -270,7 +270,7 @@ function analizarReglas(
 
                 RESPUESTAS.diagnostico,
 
-            notificarHumano: false,
+            notificarHumano: true,
 
             numeroLimpio: numero
 

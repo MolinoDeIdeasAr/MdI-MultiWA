@@ -105,11 +105,29 @@ async function simularEscrituraHumana(client, chatId, mensaje) {
     const tiempoBase = getTiempoEscritura(mensaje);
 
     try {
-        const chat = await Promise.race([
-            client.getChatById(chatId),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
-        ]);
-
+        // Intentamos obtener el chat de forma más robusta
+        // con reintentos para lidiar con IDs tipo @lid
+        let chat = null;
+        let intentos = 0;
+        const MAX_INTENTOS = 3;
+        
+        while (!chat && intentos < MAX_INTENTOS) {
+            try {
+                chat = await Promise.race([
+                    client.getChatById(chatId),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    )
+                ]);
+            } catch (err) {
+                intentos++;
+                if (intentos < MAX_INTENTOS) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } else {
+                    throw err;
+                }
+            }
+        }
         if (chat && typeof chat.sendStateTyping === 'function') {
             await chat.sendStateTyping();
 
