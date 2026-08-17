@@ -14,6 +14,8 @@
 // DEPENDENCIAS
 //==============================================================
 
+const { detectarBot } = require('../core/ai/bot-detector');
+
 const crmFlow = require('./crm-flow');
 
 const aiEngine = require('../core/ai/ai-engine');
@@ -43,6 +45,31 @@ class AIFlow {
     //----------------------------------------------------------
     // PROCESAR MENSAJE
     //----------------------------------------------------------
+
+    async procesar(context) {
+
+    //----------------------------------------------------------
+    // DETECCIÓN MÍNIMA DE BOT (NUEVO)
+    //----------------------------------------------------------
+    const analisisBot = detectarBot(context.texto);
+
+    if (analisisBot.esBot) {
+        console.log(`🤖 BOT detectado (${analisisBot.score} señales) - ${context.numero}`);
+        console.log(`   ⏭️ Se omite IA y notificación al usuario`);
+
+        // Marcar como bot: sin IA, sin notificación
+        context.estadoIA = 'bot_detectado';
+        context.intencionIA = 'auto_responder';
+        context.debeResponderIA = false;
+        context.debeNotificarAsesor = false;
+        context.debeRegistrarBaja = false;
+        context.respuestaIA = '';
+
+        return context;
+    }
+
+    //----------------------------------------------------------
+    // ... resto del código existente (aiEngine.analizar, etc.)
 
     async procesar(
 

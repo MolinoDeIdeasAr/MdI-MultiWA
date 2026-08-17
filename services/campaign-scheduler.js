@@ -15,6 +15,7 @@
  *  • Finalizar campañas
  * =============================================================
  */
+const antiBan = require('../config/anti-baneo');
 
 const runner = require('./campaign-runner');
 
@@ -363,14 +364,12 @@ async function ejecutar(instanceId) {
 
         guardarEstadoSeguro(instanceId);
 
-        // DELAY HUMANO: en vez de 1000ms fijo, usamos tiempo variable
-        const estado = getEstadoInstancia(instanceId);
-        const pausa = estado && estado.total
-            ? generarDelayHumano(estado.actual, estado.total)
-            : (resultado.pausa || 45000);
+        // FIX: usar la pausa que viene del runner (antiBan.getPausaAleatoria)
+        // que respeta PAUSA_BASE y PAUSA_MAX de la configuración antiban.
+        // resultado.pausa ya incluye: CONFIG.PAUSA_BASE + ruido aleatorio + pausa por lote
+        const pausa = resultado.pausa || CONFIG.PAUSA_BASE;
 
-        console.log('⏱️ Próximo envío en ' + Math.floor(pausa / 1000) + 's');
-
+        console.log('⏱️ Próximo envío en ' + Math.floor(pausa / 1000) + 's (' + Math.floor(pausa / 60000) + ' min)');
         actualizarScheduler(instanceId, {
 
             status: STATUS.RUNNING,

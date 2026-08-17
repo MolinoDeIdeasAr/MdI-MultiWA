@@ -612,70 +612,37 @@ async function enviarMensaje(
         // Imagen
         //------------------------------------------------------
 
+        //------------------------------------------------------
+        // Opciones de envío: vista previa de enlaces
+        //------------------------------------------------------
+        // estado.linkPreviewActivo viene del checkbox de la interfaz.
+        // Si está en false, WhatsApp manda el link SIN tarjeta
+        // (sin imagen, sin título, sin descripción) — esto reduce
+        // mucho el riesgo de ban cuando el mensaje lleva URLs.
+        // Por defecto (si el flag no existe) dejamos preview ON
+        // para no cambiar el comportamiento histórico.
+        //------------------------------------------------------
+        const opcionesEnvio = {
+            linkPreview: estado.linkPreviewActivo !== false
+        };
+
         if(estado.imagenGuardada){
-
             const archivo = path.join(
-
-                __dirname,
-
-                "..",
-
-                "uploads",
-
+                __dirname, "..", "uploads",
                 estado.imagenGuardada
-
             );
-
             if(fs.existsSync(archivo)){
-
-                const media =
-
-                    MessageMedia.fromFilePath(
-
-                        archivo
-
-                    );
-
-                await client.sendMessage(
-
-                    destino,
-
-                    media,
-
-                    {
-
-                        caption:texto
-
-                    }
-
-                );
-
+                const media = MessageMedia.fromFilePath(archivo);
+                // Si hay imagen, la preview del caption también se controla
+                await client.sendMessage(destino, media, {
+                    caption: texto,
+                    linkPreview: opcionesEnvio.linkPreview
+                });
+            } else {
+                await client.sendMessage(destino, texto, opcionesEnvio);
             }
-
-            else{
-
-                await client.sendMessage(
-
-                    destino,
-
-                    texto
-
-                );
-
-            }
-
-        }
-
-        else{
-
-            await client.sendMessage(
-
-                destino,
-
-                texto
-
-            );
-
+        } else {
+            await client.sendMessage(destino, texto, opcionesEnvio);
         }
 
         //------------------------------------------------------
