@@ -1,1029 +1,265 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
-
 <meta charset="UTF-8">
-
 <title>Monitor | MdI MultiWA</title>
-
 <link rel="icon" href="/logo_MdI.ico">
-
 <style>
-
-*{
-    margin:0;
-    padding:0;
-    box-sizing:border-box;
-}
-
-body{
-
-    background:#0f172a;
-    color:#f8fafc;
-    font-family:Segoe UI,Arial,sans-serif;
-    padding:20px;
-
-}
-
-.container{
-
-    max-width:1400px;
-    margin:auto;
-
-}
-
-h1{
-
-    color:#38bdf8;
-    margin-bottom:20px;
-
-}
-
-.card{
-
-    background:#1e293b;
-    border-radius:12px;
-    padding:18px;
-    margin-bottom:18px;
-    border:1px solid #334155;
-
-}
-
-.grid{
-
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-    gap:15px;
-
-}
-
-.stat{
-
-    background:#0f172a;
-    border:1px solid #334155;
-    border-radius:10px;
-    padding:15px;
-    text-align:center;
-
-}
-
-.stat h2{
-
-    font-size:34px;
-    color:#38bdf8;
-
-}
-
-.stat p{
-
-    color:#94a3b8;
-    margin-top:5px;
-
-}
-
-.progress{
-
-    width:100%;
-    height:24px;
-    background:#1e293b;
-    border-radius:30px;
-    overflow:hidden;
-
-}
-
-.progress-bar{
-
-    width:0%;
-    height:100%;
-    background:#22c55e;
-    transition:.4s;
-
-}
-
-.info-row{
-
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
-    gap:20px;
-
-}
-
-.info-box{
-
-    background:#0f172a;
-    border:1px solid #334155;
-    border-radius:10px;
-    padding:15px;
-
-}
-
-.info-box h3{
-
-    color:#38bdf8;
-    margin-bottom:10px;
-
-}
-
-.info-box table{
-
-    width:100%;
-
-}
-
-.info-box td{
-
-    padding:6px 0;
-    color:#cbd5e1;
-
-}
-
-.status{
-
-    padding:12px;
-    border-radius:8px;
-    font-weight:bold;
-    text-align:center;
-    margin-bottom:20px;
-
-}
-
-.online{
-
-    background:#14532d;
-
-}
-
-.offline{
-
-    background:#7f1d1d;
-
-}
-
-.warning{
-
-    background:#78350f;
-
-}
-
-select{
-
-    padding:10px;
-    border-radius:8px;
-    background:#0f172a;
-    color:white;
-    border:1px solid #334155;
-
-}
-
-button{
-
-    padding:10px 18px;
-    border:none;
-    border-radius:8px;
-    cursor:pointer;
-    color:white;
-    font-weight:bold;
-
-}
-
-.btn-blue{
-
-    background:#2563eb;
-
-}
-
-.btn-orange{
-
-    background:#ea580c;
-
-}
-
-.btn-red{
-
-    background:#dc2626;
-
-}
-
-.btn-green{
-
-    background:#16a34a;
-
-}
-
-table{
-
-    width:100%;
-    border-collapse:collapse;
-
-}
-
-th{
-
-    background:#1e293b;
-    padding:10px;
-    text-align:left;
-
-}
-
-td{
-
-    padding:9px;
-    border-bottom:1px solid #334155;
-
-}
-
-tbody tr:hover{
-
-    background:#162032;
-
-}
-
-.log{
-
-    background:#020617;
-    border:1px solid #334155;
-    height:280px;
-    overflow:auto;
-    padding:10px;
-    font-family:Consolas;
-    font-size:12px;
-
-}
-
-.badge{
-
-    padding:4px 10px;
-    border-radius:30px;
-    font-size:12px;
-
-}
-
-.badge-ok{
-
-    background:#14532d;
-
-}
-
-.badge-pause{
-
-    background:#78350f;
-
-}
-
-.badge-stop{
-
-    background:#7f1d1d;
-
-}
-
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0f172a;color:#f8fafc;font-family:Segoe UI,Arial,sans-serif;padding:20px;}
+.container{max-width:1400px;margin:auto;}
+h1{color:#38bdf8;margin-bottom:20px;}
+.card{background:#1e293b;border-radius:12px;padding:18px;margin-bottom:18px;border:1px solid #334155;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;}
+.stat{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:15px;text-align:center;}
+.stat h2{font-size:34px;color:#38bdf8;}
+.stat p{color:#94a3b8;margin-top:5px;}
+.progress{width:100%;height:24px;background:#1e293b;border-radius:30px;overflow:hidden;}
+.progress-bar{width:0%;height:100%;background:#22c55e;transition:.4s;}
+.info-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;}
+.info-box{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:15px;}
+.info-box h3{color:#38bdf8;margin-bottom:10px;}
+.info-box table{width:100%;}
+.info-box td{padding:6px 0;color:#cbd5e1;}
+.status{padding:12px;border-radius:8px;font-weight:bold;text-align:center;margin-bottom:20px;}
+.online{background:#14532d;}
+.offline{background:#7f1d1d;}
+.warning{background:#78350f;}
+select{padding:10px;border-radius:8px;background:#0f172a;color:white;border:1px solid #334155;}
+button{padding:10px 18px;border:none;border-radius:8px;cursor:pointer;color:white;font-weight:bold;}
+.btn-blue{background:#2563eb;}
+.btn-orange{background:#ea580c;}
+.btn-red{background:#dc2626;}
+.btn-green{background:#16a34a;}
+table{width:100%;border-collapse:collapse;}
+th{background:#1e293b;padding:10px;text-align:left;}
+td{padding:9px;border-bottom:1px solid #334155;}
+tbody tr:hover{background:#162032;}
+.log{background:#020617;border:1px solid #334155;height:280px;overflow:auto;padding:10px;font-family:Consolas;font-size:12px;}
+.badge{padding:4px 10px;border-radius:30px;font-size:12px;}
+.badge-ok{background:#14532d;}
+.badge-pause{background:#78350f;}
+.badge-stop{background:#7f1d1d;}
 </style>
-
 </head>
-
 <body>
-
 <div class="container">
 
 <h1>
-
 📊 Monitor de Campañas
 <% if (estado && estado.rubro) { %> · <%= estado.rubro %><% } %>
-
+<% if (estado && estado.tipoCampana) { %> · 🏷️ <%= estado.tipoCampana %><% } %>
 </h1>
 
 <div class="card">
-
 <form id="selectorForm">
-
 <select id="instance">
-
 <% instancias.forEach(i=>{ %>
-
-<option
-value="<%=i.id%>"
-<%=activeId===i.id?'selected':''%>>
-
-<%=i.numero || i.id%>
-
-<%=i.listo?'✅':'❌'%>
-
+<option value="<%=i.id%>" <%=activeId===i.id?'selected':''%>>
+<%=i.numero || i.id%> <%=i.listo?'✅':'❌'%>
 </option>
-
 <% }) %>
-
 </select>
-
-<button
-type="button"
-class="btn-blue"
-id="btnActualizar">
-
-Actualizar
-
-</button>
-
+<button type="button" class="btn-blue" id="btnActualizar">Actualizar</button>
 </form>
-
 </div>
 
-<div
-id="estadoWhatsapp"
-class="status offline">
-
-Sin conexión
-
-</div>
+<div id="estadoWhatsapp" class="status offline">Sin conexión</div>
 
 <div class="grid">
-
-<div class="stat">
-
-<h2 id="stTotal">0</h2>
-
-<p>Total</p>
-
-</div>
-
-<div class="stat">
-
-<h2 id="stActual">0</h2>
-
-<p>Procesados</p>
-
-</div>
-
-<div class="stat">
-
-<h2 id="stEnviados">0</h2>
-
-<p>Enviados</p>
-
-</div>
-
-<div class="stat">
-
-<h2 id="stPendientes">0</h2>
-
-<p>Pendientes</p>
-
-</div>
-
-<div class="stat">
-
-<h2 id="stFallidos">0</h2>
-
-<p>Fallidos</p>
-
-</div>
-
-<div class="stat">
-
-<h2 id="stBajas">0</h2>
-
-<p>Bajas</p>
-
-</div>
-
+<div class="stat"><h2 id="stTotal">0</h2><p>Total</p></div>
+<div class="stat"><h2 id="stActual">0</h2><p>Procesados</p></div>
+<div class="stat"><h2 id="stEnviados">0</h2><p>Enviados</p></div>
+<div class="stat"><h2 id="stPendientes">0</h2><p>Pendientes</p></div>
+<div class="stat"><h2 id="stFallidos">0</h2><p>Fallidos</p></div>
+<div class="stat"><h2 id="stBajas">0</h2><p>Bajas</p></div>
 </div>
 
 <div class="card">
-
-<h3>
-
-Progreso
-
-</h3>
-
-<br>
-
-<div class="progress">
-
-<div
-id="barra"
-class="progress-bar">
-
-</div>
-
-</div>
-
-<br>
-
-<div
-id="porcentaje"
-style="text-align:right">
-
-0%
-
-</div>
-
+<h3>Progreso</h3><br>
+<div class="progress"><div id="barra" class="progress-bar"></div></div><br>
+<div id="porcentaje" style="text-align:right">0%</div>
 </div>
 
 <div class="info-row">
-
 <div class="info-box">
-
-<h3>
-
-🗓 Scheduler
-
-</h3>
-
+<h3>🗓 Scheduler</h3>
 <table>
-
-<tr>
-
-<td>Estado</td>
-
-<td id="schEstado">-</td>
-
-</tr>
-
-<tr>
-
-<td>Actual</td>
-
-<td id="schActual">-</td>
-
-</tr>
-
-<tr>
-
-<td>Total</td>
-
-<td id="schTotal">-</td>
-
-</tr>
-
-<tr>
-
-<td>Próximo envío</td>
-
-<td id="schNext">-</td>
-
-</tr>
-
-<tr>
-
-<td>Mensaje actual</td>
-
-<td id="schMensaje">-</td>
-
-</tr>
-
-<tr>
-
-<td>Contacto</td>
-
-<td id="schContacto">-</td>
-
-</tr>
-
+<tr><td>Estado</td><td id="schEstado">-</td></tr>
+<tr><td>Actual</td><td id="schActual">-</td></tr>
+<tr><td>Total</td><td id="schTotal">-</td></tr>
+<tr><td>Próximo envío</td><td id="schNext">-</td></tr>
+<tr><td>Contacto</td><td id="schContacto">-</td></tr>
 </table>
-
 </div>
 
 <div class="info-box">
-
-<h3>
-
-🛡 AntiBan
-
-</h3>
-
+<h3>🛡 AntiBan</h3>
 <table>
-
-<tr>
-
-<td>Mensajes Hoy</td>
-
-<td id="abHoy">0</td>
-
-</tr>
-
-<tr>
-
-<td>Mensajes Hora</td>
-
-<td id="abHora">0</td>
-
-</tr>
-
-<tr>
-
-<td>Motivo</td>
-
-<td id="abMotivo">-</td>
-
-</tr>
-
-<tr>
-
-<td>Tiempo restante</td>
-
-<td id="abTiempo">-</td>
-
-</tr>
-
+<tr><td>Mensajes Hoy</td><td id="abHoy">0</td></tr>
+<tr><td>Mensajes Hora</td><td id="abHora">0</td></tr>
+<tr><td>Motivo</td><td id="abMotivo">-</td></tr>
+<tr><td>Tiempo restante</td><td id="abTiempo">-</td></tr>
 </table>
-
+</div>
 </div>
 
-</div>
-
-<!-- ========================================================= -->
 <!-- CONTACTOS -->
-<!-- ========================================================= -->
-
 <div class="card">
-
-    <h3>
-
-        📋 Contactos
-
-    </h3>
-
-    <br>
-
-    <div style="overflow:auto;max-height:450px;">
-
-        <table>
-
-            <thead>
-
-                <tr>
-
-                    <th>#</th>
-
-                    <th>Nombre</th>
-
-                    <th>Número</th>
-
-                    <th>Estado</th>
-
-                    <th>Fecha</th>
-
-                </tr>
-
-            </thead>
-
-            <tbody id="tablaContactos">
-
-                <tr>
-
-                    <td colspan="5" style="text-align:center;color:#94a3b8;">
-
-                        Esperando datos...
-
-                    </td>
-
-                </tr>
-
-            </tbody>
-
-        </table>
-
-    </div>
-
+<h3>📋 Contactos</h3><br>
+<div style="overflow:auto;max-height:450px;">
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Nombre</th>
+<th>Número</th>
+<th>Rubro</th>
+<th>Estado</th>
+<th>Fecha</th>
+</tr>
+</thead>
+<tbody id="tablaContactos">
+<tr><td colspan="6" style="text-align:center;color:#94a3b8;">Esperando datos...</td></tr>
+</tbody>
+</table>
+</div>
 </div>
 
-<!-- ========================================================= -->
 <!-- FALLIDOS -->
-<!-- ========================================================= -->
-
 <div class="card">
-
-    <h3>
-
-        ❌ Envíos Fallidos
-
-    </h3>
-
-    <br>
-
-    <div style="overflow:auto;max-height:250px;">
-
-        <table>
-
-            <thead>
-
-                <tr>
-
-                    <th>Nombre</th>
-
-                    <th>Número</th>
-
-                    <th>Error</th>
-
-                </tr>
-
-            </thead>
-
-            <tbody id="tablaFallidos">
-
-                <tr>
-
-                    <td colspan="3"
-
-                        style="text-align:center;color:#94a3b8;">
-
-                        Sin errores
-
-                    </td>
-
-                </tr>
-
-            </tbody>
-
-        </table>
-
-    </div>
-
+<h3>❌ Envíos Fallidos</h3><br>
+<div style="overflow:auto;max-height:250px;">
+<table>
+<thead>
+<tr><th>Nombre</th><th>Número</th><th>Error</th></tr>
+</thead>
+<tbody id="tablaFallidos">
+<tr><td colspan="3" style="text-align:center;color:#94a3b8;">Sin errores</td></tr>
+</tbody>
+</table>
+</div>
 </div>
 
-<!-- ========================================================= -->
 <!-- ACCIONES -->
-<!-- ========================================================= -->
-
 <div class="card">
-
-    <button
-
-        class="btn-orange"
-
-        id="btnPausar">
-
-        ⏸ Pausar
-
-    </button>
-
-    <button
-
-        class="btn-red"
-
-        id="btnDetener">
-
-        ⛔ Detener
-
-    </button>
-
-    <button
-
-        class="btn-green"
-
-        onclick="location.reload()">
-
-        🔄 Recargar
-
-    </button>
-
+<button class="btn-orange" id="btnPausar">⏸ Pausar</button>
+<button class="btn-red" id="btnDetener">⛔ Detener</button>
+<button class="btn-green" onclick="location.reload()">🔄 Recargar</button>
 </div>
 
-<!-- ========================================================= -->
 <!-- LOGS -->
-<!-- ========================================================= -->
-
 <div class="card">
-
-    <h3>
-
-        📜 Logs del Sistema
-
-    </h3>
-
-    <br>
-
-    <div
-
-        id="logs"
-
-        class="log">
-
-        Esperando eventos...
-
-    </div>
-
+<h3>📜 Logs del Sistema</h3><br>
+<div id="logs" class="log">Esperando eventos...</div>
 </div>
 
-<!-- ========================================================= -->
 <!-- FOOTER -->
-<!-- ========================================================= -->
-
-<div
-style="margin-top:30px;
-display:flex;
-gap:20px;
-flex-wrap:wrap;">
-
-    <a href="/">
-
-        ← Inicio
-
-    </a>
-
-    <a href="/cargar">
-
-        📂 Cargar contactos
-
-    </a>
-
-    <a href="/conversaciones">
-
-        💬 Conversaciones
-
-    </a>
-
-    <a href="/bajas">
-
-        🚫 Bajas
-
-    </a>
-
-    <a href="/config-antibaneo">
-
-        ⚙ Configuración
-
-    </a>
-
+<div style="margin-top:30px;display:flex;gap:20px;flex-wrap:wrap;">
+<a href="/">← Inicio</a>
+<a href="/cargar">📂 Cargar contactos</a>
+<a href="/conversaciones">💬 Conversaciones</a>
+<a href="/bajas">🚫 Bajas</a>
+<a href="/config-antibaneo">⚙ Configuración</a>
 </div>
 
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-
 <script>
-
 const socket = io();
-
 const instanceId = "<%= activeId %>";
 
-
-//====================================================
-// ACTUALIZAR MONITOR
-//====================================================
-
 async function actualizar(){
-
     try{
-
-        const r = await fetch(
-    `/api/monitor/progreso?instanceId=${instanceId}`
-);
-
+        const r = await fetch(`/api/monitor/progreso?instanceId=${instanceId}`);
         const data = await r.json();
-
         if(!data.ok) return;
 
-        //-------------------------
-        // PROGRESO
-        //-------------------------
-
         const p = data.progreso;
-
-        document.getElementById('stTotal').innerText =
-            p.total || 0;
-
-        document.getElementById('stActual').innerText =
-            p.actual || 0;
-
-        document.getElementById('stEnviados').innerText =
-            p.enviados || 0;
-
-        document.getElementById('stPendientes').innerText =
-            p.pendientes || 0;
-
-        document.getElementById('stFallidos').innerText =
-            p.fallidos || 0;
-
-        document.getElementById('stBajas').innerText =
-            p.bajas || 0;
-
-        document.getElementById('barra').style.width =
-            p.porcentaje + "%";
-
-        document.getElementById('porcentaje').innerText =
-            p.porcentaje + "%";
-
-        //-------------------------
-        // ESTADO WHATSAPP
-        //-------------------------
+        document.getElementById('stTotal').innerText = p.total || 0;
+        document.getElementById('stActual').innerText = p.actual || 0;
+        document.getElementById('stEnviados').innerText = p.enviados || 0;
+        document.getElementById('stPendientes').innerText = p.pendientes || 0;
+        document.getElementById('stFallidos').innerText = p.fallidos || 0;
+        document.getElementById('stBajas').innerText = p.bajas || 0;
+        document.getElementById('barra').style.width = p.porcentaje + "%";
+        document.getElementById('porcentaje').innerText = p.porcentaje + "%";
 
         const estado = document.getElementById('estadoWhatsapp');
-
         if(data.enviando){
-
             estado.className="status online";
-
             estado.innerHTML="🟢 Campaña en ejecución";
-
-        }
-
-        else if(data.campanaFinalizada){
-
+        } else if(data.campanaFinalizada){
             estado.className="status warning";
-
             estado.innerHTML="✅ Campaña finalizada";
-
-        }
-
-        else{
-
+        } else {
             estado.className="status offline";
-
             estado.innerHTML="⏸ Sin actividad";
-
         }
-
-        //-------------------------
-        // SCHEDULER
-        //-------------------------
 
         const s = data.scheduler || {};
-
-        document.getElementById('schEstado').innerText =
-            s.status || '-';
-
-        document.getElementById('schActual').innerText =
-            s.actual ?? '-';
-
-        document.getElementById('schTotal').innerText =
-            s.total ?? '-';
-
-        document.getElementById('schMensaje').innerText =
-            s.mensajeActual || '-';
-
-        document.getElementById('schContacto').innerText =
-            s.contactoActual || '-';
-
-        document.getElementById('schNext').innerText =
-            s.nextRun
-                ? new Date(s.nextRun).toLocaleTimeString()
-                : '-';
-
-        //-------------------------
-        // ANTIBAN
-        //-------------------------
+        document.getElementById('schEstado').innerText = s.status || '-';
+        document.getElementById('schActual').innerText = s.actual ?? '-';
+        document.getElementById('schTotal').innerText = s.total ?? '-';
+        document.getElementById('schContacto').innerText = s.contactoActual || '-';
+        document.getElementById('schNext').innerText = s.nextRun ? new Date(s.nextRun).toLocaleTimeString() : '-';
 
         const a = data.antiban || {};
+        document.getElementById('abHoy').innerText = a.mensajesHoy ?? 0;
+        document.getElementById('abHora').innerText = a.mensajesHora ?? 0;
+        document.getElementById('abMotivo').innerText = a.motivo || '-';
+        document.getElementById('abTiempo').innerText = a.tiempoRestante ? a.tiempoRestante + " s" : "-";
 
-        document.getElementById('abHoy').innerText =
-            a.mensajesHoy ?? 0;
-
-        document.getElementById('abHora').innerText =
-            a.mensajesHora ?? 0;
-
-        document.getElementById('abMotivo').innerText =
-            a.motivo || '-';
-
-        document.getElementById('abTiempo').innerText =
-            a.tiempoRestante
-                ? a.tiempoRestante + " s"
-                : "-";
-
-        //-------------------------
         // CONTACTOS
-        //-------------------------
-
         let html='';
-
         (data.contactos || []).forEach((c,i)=>{
-
-            html+=`
-            <tr>
-
+            html+=`<tr>
                 <td>${i+1}</td>
-
-                <td>${c.nombre}</td>
-
-                <td>${c.numero}</td>
-
-                <td>${c.estadoEnvio}</td>
-
-                <td>${
-                    c.fechaEnvio
-                        ? new Date(c.fechaEnvio).toLocaleString(
-                            'es-AR',
-                            {
-                                timeZone: 'America/Argentina/Buenos_Aires',
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                                hour12: false
-                            }
-                        )
-                        : '-'
-                }</td>
-
+                <td>${c.nombre || '-'}</td>
+                <td>${c.numero || '-'}</td>
+                <td>${c.rubro || '-'}</td>
+                <td>${c.estadoEnvio || '-'}</td>
+                <td>${c.fechaEnvio ? new Date(c.fechaEnvio).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '-'}</td>
             </tr>`;
-
         });
-
         if(html===''){
-
-            html=`
-            <tr>
-
-                <td colspan="5"
-                    style="text-align:center">
-
-                    Sin contactos
-
-                </td>
-
-            </tr>`;
-
+            html=`<tr><td colspan="6" style="text-align:center">Sin contactos</td></tr>`;
         }
-
         document.getElementById('tablaContactos').innerHTML=html;
 
-    }
+        // FALLIDOS
+        let htmlFallidos='';
+        (data.fallidos || []).forEach((f)=>{
+            htmlFallidos+=`<tr>
+                <td>${f.nombre || 'Sin nombre'}</td>
+                <td>${f.numero || 'Sin número'}</td>
+                <td style="color:#ef4444;">${f.motivo || 'Error desconocido'}</td>
+            </tr>`;
+        });
+        if(htmlFallidos===''){
+            htmlFallidos=`<tr><td colspan="3" style="text-align:center;color:#94a3b8;">Sin errores</td></tr>`;
+        }
+        document.getElementById('tablaFallidos').innerHTML=htmlFallidos;
 
-    catch(err){
-
+    } catch(err){
         console.error(err);
-
     }
-
 }
 
-setInterval(actualizar,1000);
-
+setInterval(actualizar, 1000);
 actualizar();
 
+document.getElementById('btnActualizar').onclick=actualizar;
+document.getElementById('btnPausar').onclick=()=>{ fetch('/pausar',{method:'POST'}); };
+document.getElementById('btnDetener').onclick=()=>{ if(!confirm("¿Detener campaña?")) return; fetch('/detener',{method:'POST'}); };
+document.getElementById('instance').onchange=function(){ location.href="/monitor?instanceId="+this.value; };
 
-//====================================================
-// BOTONES
-//====================================================
-
-document.getElementById('btnActualizar')
-.onclick=actualizar;
-
-document.getElementById('btnPausar')
-.onclick=()=>{
-
-    fetch('/pausar',{
-
-        method:'POST'
-
-    });
-
-};
-
-document.getElementById('btnDetener')
-.onclick=()=>{
-
-    if(!confirm("¿Detener campaña?"))
-        return;
-
-    fetch('/detener',{
-
-        method:'POST'
-
-    });
-
-};
-
-
-//====================================================
-// CAMBIO DE INSTANCIA
-//====================================================
-
-document.getElementById('instance')
-.onchange=function(){
-
-    location.href=
-    "/monitor?instanceId="+this.value;
-
-};
-
-
-//====================================================
-// LOGS
-//====================================================
-
-socket.on(
-
-    "server_log",
-
-    log=>{
-
-        const div=document.getElementById("logs");
-
-        div.innerHTML+=
-            log.message+"<br>";
-
-        div.scrollTop=
-            div.scrollHeight;
-
-    }
-
-);
-
+socket.on("server_log", log=>{
+    const div=document.getElementById("logs");
+    div.innerHTML+=log.message+"<br>";
+    div.scrollTop=div.scrollHeight;
+});
 </script>
-
 </body>
-
 </html>

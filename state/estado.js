@@ -131,6 +131,13 @@ function getDefaultEstado() {
         // core/ai/ai-rules.js usa el texto genérico por defecto.
         respuestaInfo: '',
 
+//------------------------------------------------------
+        // NUEVOS CAMPOS v3.2.0
+        //------------------------------------------------------
+        tipoCampana: '',
+        respuestasInfoPorTipo: {},
+        linkPreviewActivo: false,  // por defecto OFF
+
         //------------------------------------------------------
         // Conversaciones
         //------------------------------------------------------

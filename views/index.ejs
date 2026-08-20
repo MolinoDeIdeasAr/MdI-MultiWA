@@ -24,6 +24,8 @@
         .btn-success { background: #28a745; color: white; }
         .btn-danger  { background: #dc3545; color: white; }
         .btn-warning { background: #f59e0b; color: #1a1a2e; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; background: #e9ecef; border: 1px solid #ced4da; border-radius: 4px; cursor: pointer; }
+        .btn-sm.activo { background: #007bff; color: white; border-color: #007bff; font-weight: bold; }
         .instancia-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 15px; background: white; border-radius: 6px; margin-bottom: 8px; border: 1px solid #dee2e6; }
         .instancia-activa { border-left: 4px solid #28a745 !important; background: #f0fff4 !important; }
         .instancia-numero { font-weight: bold; color: #1a1a2e; }
@@ -46,6 +48,7 @@
         .drop-area { border: 2px dashed #ced4da; padding: 20px; text-align: center; border-radius: 6px; cursor: pointer; transition: border-color 0.2s; font-size: 14px; color: #666; }
         .drop-area:hover { border-color: #007bff; }
         .file-info { display: none; margin: 8px 0; padding: 8px 12px; background: #e9ecef; border-radius: 6px; font-size: 14px; }
+        .info-box { padding: 12px; background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -82,7 +85,7 @@
         <div class="status-box status-warning">⚠️ No hay cuentas de WhatsApp configuradas</div>
     <% } %>
 
-    <!-- INSTANCIAS: solo mostrar conectadas + la activa -->
+    <!-- INSTANCIAS -->
     <div class="card">
         <div class="flex-between">
             <h3>📱 Mis Cuentas</h3>
@@ -92,7 +95,6 @@
         </div>
 
         <%
-            // Mostrar: conectadas + activa + las que están conectando (para poder limpiarlas)
             const instanciasMostrar = (instancias || []).filter(i => i.listo || i.id === activeId || !i.listo);
         %>
 
@@ -134,7 +136,6 @@
             <% } %>
 
             <%
-                // Mostrar cuántas desconectadas hay pero ocultas
                 const desconectadasOcultas = (instancias || []).filter(i => !i.listo && i.id !== activeId);
             %>
             <% if (desconectadasOcultas.length > 0) { %>
@@ -168,7 +169,6 @@
 
         <div id="msg-carga" style="display:none;" class="alerta-carga"></div>
 
-        <!-- DRIVE -->
         <div style="margin-bottom:15px;">
             <label style="font-weight:bold; display:block; margin-bottom:6px;">🔗 Google Sheets (enlace público)</label>
             <input type="text" id="url-drive" placeholder="https://docs.google.com/spreadsheets/d/...">
@@ -181,7 +181,6 @@
 
         <hr style="margin:15px 0; border-color:#dee2e6;">
 
-        <!-- EXCEL -->
         <div>
             <label style="font-weight:bold; display:block; margin-bottom:6px;">📁 Subir archivo Excel</label>
             <div class="drop-area" id="drop-area">
@@ -213,27 +212,78 @@
                     Usá <code>{{NOMBRE}}</code> para personalizar y <code>{variante1|variante2}</code> para spintax.
                 </p>
 
+                <!-- TIPO DE CAMPAÑA -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-weight:bold; display:block; margin-bottom:6px;">🏷️ Tipo de campaña</label>
+                    <input type="text"
+                           id="tipoCampana"
+                           name="tipoCampana"
+                           placeholder="Ej: Google, Redes Sociales, Cartelería, Email Marketing..."
+                           value="<%= (estado && estado.tipoCampana) ? estado.tipoCampana : '' %>">
+                    <div style="font-size:12px; color:#666; margin-top:4px;">
+                        Se usa para personalizar la respuesta automática cuando un contacto escribe "INFO"
+                    </div>
+                </div>
+
                 <label style="font-weight:bold;">Mensaje 1 (requerido)</label>
-                <textarea name="mensaje1" id="mensaje1" placeholder="Hola {{NOMBRE}}..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[0]) ? estado.mensajesGuardados[0] : '' %></textarea>
+                <textarea name="mensaje1" id="mensaje1" placeholder="Hola {{NOMBRE}}..."><%= (estado && estado.mensajesGuardados && estado.mensajesGuardados[0]) ? estado.mensajesGuardados[0] : '' %></textarea>
 
                 <label style="font-weight:bold;">Mensaje 2 (variante opcional)</label>
-                <textarea name="mensaje2" id="mensaje2" placeholder="Otra variante..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[1]) ? estado.mensajesGuardados[1] : '' %></textarea>
+                <textarea name="mensaje2" id="mensaje2" placeholder="Otra variante..."><%= (estado && estado.mensajesGuardados && estado.mensajesGuardados[1]) ? estado.mensajesGuardados[1] : '' %></textarea>
 
                 <label style="font-weight:bold;">Mensaje 3 (variante opcional)</label>
-                <textarea name="mensaje3" id="mensaje3" placeholder="Otra variante..."><%= (estado.mensajesGuardados && estado.mensajesGuardados[2]) ? estado.mensajesGuardados[2] : '' %></textarea>
+                <textarea name="mensaje3" id="mensaje3" placeholder="Otra variante..."><%= (estado && estado.mensajesGuardados && estado.mensajesGuardados[2]) ? estado.mensajesGuardados[2] : '' %></textarea>
 
-                <label style="font-weight:bold;">Respuesta automática a "INFO" (opcional)</label>
-                <p style="font-size:12px; color:#666; margin:2px 0 6px;">Si un contacto escribe "info" (o "información", "más info"), le respondemos esto en vez del texto genérico. Dejalo vacío para usar el genérico.</p>
-                <textarea name="respuestaInfo" id="respuestaInfo" placeholder="Te cuento cómo trabajamos..."><%= estado.respuestaInfo || '' %></textarea>
+                <!-- RESPUESTAS A INFO POR TIPO DE CAMPAÑA -->
+                <div style="margin-bottom:15px;">
+                    <label style="font-weight:bold; display:block; margin-bottom:6px;">💬 Respuesta automática a "INFO"</label>
+                    <p style="font-size:12px; color:#666; margin:2px 0 6px;">
+                        Esta respuesta se envía cuando un contacto escribe "info".
+                        Se personaliza según el <strong>Tipo de campaña</strong> que definiste arriba.
+                    </p>
+
+                    <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn-sm" onclick="editarRespuestaInfo('')" id="btn-resp-generico">📋 Genérica</button>
+                        <button type="button" class="btn-sm" onclick="editarRespuestaInfo('Google')" id="btn-resp-Google">🔍 Google</button>
+                        <button type="button" class="btn-sm" onclick="editarRespuestaInfo('Redes Sociales')" id="btn-resp-RedesSociales">📱 Redes</button>
+                        <button type="button" class="btn-sm" onclick="editarRespuestaInfo('Cartelería')" id="btn-resp-Cartelería">🪧 Cartelería</button>
+                        <button type="button" class="btn-sm" onclick="editarRespuestaInfo('Email Marketing')" id="btn-resp-EmailMarketing">📧 Email</button>
+                    </div>
+
+                    <input type="hidden" id="respuestaInfoTipoActual" value="">
+
+                    <textarea name="respuestaInfo" id="respuestaInfo"
+                              placeholder="Escribí la respuesta personalizada para este tipo de campaña..."
+                              style="min-height:80px;"><%= (estado && estado.respuestaInfo) ? estado.respuestaInfo : '' %></textarea>
+
+                    <div style="font-size:11px; color:#999; margin-top:4px;">
+                        💡 Cambiá el tipo de campaña arriba para ver/editar su respuesta específica
+                    </div>
+                </div>
+
+                <!-- VISTA PREVIA DE ENLACES -->
+                <div class="info-box">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:bold; color:#1a1a2e;">
+                        <input type="checkbox"
+                               id="linkPreviewActivo"
+                               style="width:18px; height:18px; cursor:pointer;"
+                               <%= (estado && estado.linkPreviewActivo !== false) ? 'checked' : '' %>>
+                        <span>🖼️ Mostrar vista previa de enlaces</span>
+                    </label>
+                    <p style="font-size:12px; color:#666; margin:6px 0 0 28px;">
+                        Si lo destildás, los links se envían sin tarjeta (sin imagen ni título). <br>
+                        <strong style="color:#d97706;">Recomendado destildarlo</strong> si tu mensaje tiene URLs para reducir el riesgo de ban.
+                    </p>
+                </div>
 
                 <!-- IMAGEN -->
                 <div style="margin:15px 0;">
                     <label style="font-weight:bold;">🖼️ Imagen adjunta (opcional)</label>
-                    <% if (estado.imagenGuardada) { %>
+                    <% if (estado && estado.imagenGuardada) { %>
                         <div style="margin:8px 0; display:flex; align-items:center; gap:12px; padding:10px; background:#e9ecef; border-radius:8px;">
-                            <img src="/uploads/<%= estado.imagenGuardada %>"
-                                 style="width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ced4da;"
-                                 onerror="this.style.display='none'">
+                            <img src="/uploads/<%= encodeURIComponent(estado.imagenGuardada) %>"
+     style="width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid #ced4da;"
+     onerror="this.style.display='none'">
                             <div>
                                 <div style="font-size:13px; color:#333; margin-bottom:6px;">📎 <%= estado.imagenGuardada.replace(/^\d+_/, '') %></div>
                                 <button type="button" onclick="borrarImagen()" class="btn btn-danger btn-sm">✕ Quitar imagen</button>
@@ -266,7 +316,9 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-// ── Forzar desconexión de instancia trabada ──
+//====================================================
+// FORZAR DESCONEXIÓN
+//====================================================
 function forzarDesconexion(instanceId) {
     if (!confirm('¿Forzar la limpieza de esta sesión trabada? Se borrará la sesión y tendrás que escanear el QR de nuevo.')) return;
     var btn = event.target;
@@ -295,11 +347,12 @@ function forzarDesconexion(instanceId) {
     });
 }
 
-// ── Socket para actualización en tiempo real ──
+//====================================================
+// SOCKET.IO
+//====================================================
 var socket = io();
 var usuarioEscribiendo = false;
 
-// Detectar si el usuario tiene foco en algún input/textarea
 document.addEventListener('focusin', function(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
         usuarioEscribiendo = true;
@@ -307,7 +360,6 @@ document.addEventListener('focusin', function(e) {
 });
 document.addEventListener('focusout', function(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        // Pequeño delay para no cortar un paste que trigger focusout momentáneamente
         setTimeout(function() { usuarioEscribiendo = false; }, 500);
     }
 });
@@ -316,19 +368,19 @@ socket.on('connect', function() {
     socket.emit('join', '<%= userId %>');
 });
 
-// Solo recargar cuando WhatsApp conecta Y el usuario no está escribiendo
 socket.on('whatsapp_ready', function() {
     if (!usuarioEscribiendo) {
         setTimeout(function() { location.reload(); }, 1000);
     }
 });
 
-// instances_update: NO recargar automáticamente — solo cuando conecta WhatsApp (evento de arriba)
 socket.on('instances_update', function(data) {
-    // Sin reload automático — evita que saque el foco del input
+    // Sin reload automático
 });
 
-// ── Utilidades de mensajes ──
+//====================================================
+// UTILIDADES
+//====================================================
 function mostrarMsg(texto, tipo) {
     var el = document.getElementById('msg-carga');
     el.className = 'alerta-carga ' + (tipo === 'ok' ? 'alerta-ok' : 'alerta-err');
@@ -337,7 +389,9 @@ function mostrarMsg(texto, tipo) {
     if (tipo === 'ok') setTimeout(function() { el.style.display = 'none'; }, 4000);
 }
 
-// ── Cargar desde Drive ──
+//====================================================
+// CARGAR DESDE DRIVE
+//====================================================
 function cargarDesdeDrive() {
     var urlInput = document.getElementById('url-drive');
     var btn = document.getElementById('btn-drive');
@@ -349,137 +403,32 @@ function cargarDesdeDrive() {
     btn.disabled = true;
     btn.textContent = '⏳ Cargando...';
 
-        var payload = {
-
-        urlDrive: url
-
-    };
-
-    fetch(
-
-        '/api/carga/cargar',
-
-        {
-
-            method: 'POST',
-
-            headers: {
-
-                'Content-Type': 'application/json'
-
-            },
-
-            body: JSON.stringify(
-
-                payload
-
-            )
-
-        }
-
-    )
-
+    fetch('/api/carga/cargar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlDrive: url })
+    })
     .then(function(res) {
-
-        return res.json().then(function(d) {
-
-            return {
-
-                ok: res.ok,
-
-                data: d
-
-            };
-
-        });
-
+        return res.json().then(function(d) { return { ok: res.ok, data: d }; });
     })
-
     .then(function(r) {
-
-        if (!r.ok) {
-
-            throw new Error(
-
-                r.data.error ||
-
-                'Error desconocido'
-
-            );
-
-        }
-
-        var msg =
-
-            '✅ ' +
-
-            r.data.total +
-
-            ' contactos cargados.';
-
-        if (
-
-            r.data.fijos > 0
-
-        ) {
-
-            msg +=
-
-                ' ⚠️ ' +
-
-                r.data.fijos +
-
-                ' fijo(s) descartado(s).';
-
-        }
-
-        msg +=
-
-            ' Recargando...';
-
-        mostrarMsg(
-
-            msg,
-
-            'ok'
-
-        );
-
-        setTimeout(
-
-            function() {
-
-                location.reload();
-
-            },
-
-            1500
-
-        );
-
+        if (!r.ok) throw new Error(r.data.error || 'Error desconocido');
+        var msg = '✅ ' + r.data.total + ' contactos cargados.';
+        if (r.data.fijos > 0) msg += ' ⚠️ ' + r.data.fijos + ' fijo(s) descartado(s).';
+        msg += ' Recargando...';
+        mostrarMsg(msg, 'ok');
+        setTimeout(function() { location.reload(); }, 1500);
     })
-
     .catch(function(e) {
-
-        mostrarMsg(
-
-            '❌ ' + e.message,
-
-            'err'
-
-        );
-
+        mostrarMsg('❌ ' + e.message, 'err');
         btn.disabled = false;
-
-        btn.textContent =
-
-            '🔗 Cargar desde Drive';
-
+        btn.textContent = '🔗 Cargar desde Drive';
     });
-
-
 }
-// ── Drag & Drop Excel ──
+
+//====================================================
+// DRAG & DROP EXCEL
+//====================================================
 var archivoSeleccionado = null;
 var dropArea = document.getElementById('drop-area');
 var fileInput = document.getElementById('file-input');
@@ -522,7 +471,10 @@ function cargarArchivo() {
         .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
         .then(function(r) {
             if (!r.ok) throw new Error(r.data.error || 'Error desconocido');
-            var msg = '✅ ' + r.data.total + ' contactos cargados.'; if (r.data.fijos > 0) msg += ' ⚠️ ' + r.data.fijos + ' fijo(s) descartado(s).'; msg += ' Recargando...'; mostrarMsg(msg, 'ok');
+            var msg = '✅ ' + r.data.total + ' contactos cargados.';
+            if (r.data.fijos > 0) msg += ' ⚠️ ' + r.data.fijos + ' fijo(s) descartado(s).';
+            msg += ' Recargando...';
+            mostrarMsg(msg, 'ok');
             setTimeout(function() { location.reload(); }, 1500);
         })
         .catch(function(e) {
@@ -532,16 +484,17 @@ function cargarArchivo() {
         });
 }
 
-// ── Preview + subida real de imagen ──
+//====================================================
+// IMAGEN: PREVIEW + SUBIDA
+//====================================================
 var inputImagen = document.getElementById('input-imagen');
-var imagenUploadPromise = null; // lock: submit espera esto antes de iniciar campaña
+var imagenUploadPromise = null;
 
 if (inputImagen) {
     inputImagen.addEventListener('change', function(e) {
         var file = e.target.files[0];
         if (!file) return;
 
-        // Preview local inmediata
         var reader = new FileReader();
         reader.onload = function(ev) {
             var img = document.getElementById('preview-img');
@@ -550,7 +503,6 @@ if (inputImagen) {
         };
         reader.readAsDataURL(file);
 
-        // Subida real al servidor
         var fd = new FormData();
         fd.append('imagen', file);
         fd.append('instanceId', '<%= activeId %>');
@@ -584,144 +536,180 @@ function borrarImagen() {
     fetch('/borrar-imagen', { method: 'POST' }).then(function() { location.reload(); });
 }
 
-// ── Envío de campaña ──
+//====================================================
+// ENVÍO DE CAMPAÑA
+//====================================================
 var formEnvio = document.getElementById('formEnvio');
 
 if (formEnvio) {
+    console.log('✅ formEnvio encontrado, listener agregado');
 
-    formEnvio.addEventListener('submit', async function(e){
-
+    formEnvio.addEventListener('submit', async function(e) {
         e.preventDefault();
+        console.log('🚀 SUBMIT capturado');
 
         var btn = document.getElementById('btn-enviar');
         var msgEl = document.getElementById('envio-msg');
 
         btn.disabled = true;
         btn.textContent = '⏳ Iniciando campaña...';
-
         msgEl.style.display = 'none';
 
-        try{
-
-            // Si hay una imagen subiéndose todavía, esperar a que termine
-            // antes de arrancar la campaña (evita la carrera imagen vs iniciar).
+        try {
             if (imagenUploadPromise) {
+                console.log('⏳ Esperando subida de imagen...');
                 btn.textContent = '⏳ Subiendo imagen...';
                 await imagenUploadPromise;
                 btn.textContent = '⏳ Iniciando campaña...';
             }
 
-            const res = await fetch('/api/envio/iniciar',{
+            console.log('📡 Llamando a /api/envio/iniciar con instanceId:', '<%= activeId %>');
 
-                method:'POST',
-
-                headers:{
-                    'Content-Type':'application/json'
-                },
-
-                body:JSON.stringify({
-
-                    instanceId:'<%= activeId %>'
-
-                })
-
+            const res = await fetch('/api/envio/iniciar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ instanceId: '<%= activeId %>' })
             });
 
+            console.log('📥 Respuesta HTTP:', res.status);
+
             const data = await res.json();
+            console.log('📦 Data recibida:', JSON.stringify(data));
 
-            if(!res.ok){
-
-                throw new Error(data.error || 'Error');
-
+            if (!res.ok) {
+                throw new Error(data.error || 'Error HTTP ' + res.status);
             }
 
-            msgEl.style.display='block';
-            msgEl.style.background='#d4edda';
-            msgEl.style.color='#155724';
+            msgEl.style.display = 'block';
+            msgEl.style.background = '#d4edda';
+            msgEl.style.color = '#155724';
+            msgEl.innerHTML = '✅ Campaña iniciada correctamente';
 
-            msgEl.innerHTML='✅ Campaña iniciada correctamente';
+            setTimeout(() => {
+                const monitorUrl = data.monitor || '/monitor?instanceId=<%= activeId %>';
+                console.log('➡ Redirigiendo a:', monitorUrl);
+                window.location.href = monitorUrl;
+            }, 800);
 
-// Esperar medio segundo para que el usuario vea el mensaje
-setTimeout(()=>{
+        } catch (err) {
+            console.error('❌ ERROR en submit:', err);
 
-    if(data.monitor){
+            msgEl.style.display = 'block';
+            msgEl.style.background = '#f8d7da';
+            msgEl.style.color = '#721c24';
+            msgEl.innerHTML = '❌ ' + err.message + '<br><small>Revisá la consola (F12) para detalles</small>';
 
-        window.location.href=data.monitor;
-
-    }else{
-
-        window.location.href=
-            "/monitor?instanceId=<%= activeId %>";
-
-    }
-
-},500);
-
-        }catch(err){
-
-            msgEl.style.display='block';
-            msgEl.style.background='#f8d7da';
-            msgEl.style.color='#721c24';
-
-            msgEl.innerHTML='❌ '+err.message;
-
-            btn.disabled=false;
-            btn.textContent='🚀 INICIAR CAMPAÑA';
-
+            btn.disabled = false;
+            btn.textContent = '🚀 INICIAR CAMPAÑA';
         }
-
     });
-
+} else {
+    console.error('❌ formEnvio NO encontrado en el DOM');
 }
 
-// ── Autoguardado de mensajes + respuesta a INFO ──
-function autoguardar() {
+//====================================================
+// RESPUESTAS A INFO POR TIPO DE CAMPAÑA
+//====================================================
+var respuestasInfoPorTipo = <%- JSON.stringify((estado && estado.respuestasInfoPorTipo) || {}) %>;
+var tipoCampanaActual = '<%- (estado && estado.tipoCampana ? estado.tipoCampana.replace(/\\/g, "\\\\").replace(/'/g, "\\'") : '') %>';
 
-    const m1 = document.getElementById('mensaje1');
-    const m2 = document.getElementById('mensaje2');
-    const m3 = document.getElementById('mensaje3');
-    const respInfo = document.getElementById('respuestaInfo');
+function editarRespuestaInfo(tipo) {
+    guardarRespuestaInfoActual();
+
+    var textarea = document.getElementById('respuestaInfo');
+    var hiddenInput = document.getElementById('respuestaInfoTipoActual');
+
+    hiddenInput.value = tipo;
+    textarea.value = respuestasInfoPorTipo[tipo] || '';
+    textarea.placeholder = tipo
+        ? 'Respuesta personalizada para campaña de ' + tipo + '...'
+        : 'Respuesta genérica (se usa si no hay tipo de campaña definido)...';
+
+    // Resaltar botón activo
+    document.querySelectorAll('.btn-sm').forEach(function(btn) {
+        btn.classList.remove('activo');
+    });
+    var btnId = tipo ? 'btn-resp-' + tipo.replace(/\s+/g, '') : 'btn-resp-generico';
+    var btnActivo = document.getElementById(btnId);
+    if (btnActivo) {
+        btnActivo.classList.add('activo');
+    }
+}
+
+function guardarRespuestaInfoActual() {
+    var textarea = document.getElementById('respuestaInfo');
+    var hiddenInput = document.getElementById('respuestaInfoTipoActual');
+    if (!textarea || !hiddenInput) return;
+
+    var tipo = hiddenInput.value;
+    respuestasInfoPorTipo[tipo] = textarea.value;
+}
+
+// Cuando cambia el tipo de campaña, cambiar la respuesta mostrada
+var inputTipoCampana = document.getElementById('tipoCampana');
+if (inputTipoCampana) {
+    inputTipoCampana.addEventListener('change', function() {
+        var nuevoTipo = this.value.trim();
+        guardarRespuestaInfoActual();
+        editarRespuestaInfo(nuevoTipo);
+    });
+}
+
+//====================================================
+// AUTOGUARDADO
+//====================================================
+function autoguardar() {
+    var m1 = document.getElementById('mensaje1');
+    var m2 = document.getElementById('mensaje2');
+    var m3 = document.getElementById('mensaje3');
+    var respInfo = document.getElementById('respuestaInfo');
+    var linkPreview = document.getElementById('linkPreviewActivo');
+    var tipoCampana = document.getElementById('tipoCampana');
 
     if (!m1) return;
 
+    // Guardar la respuesta actual del tipo que se está editando
+    guardarRespuestaInfoActual();
+
     fetch('/api/envio/mensajes', {
-
         method: 'POST',
-
-        headers: {
-            'Content-Type': 'application/json'
-        },
-
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-
             instanceId: '<%= activeId %>',
-
             mensajes: [
-
                 m1 ? m1.value : '',
-
                 m2 ? m2.value : '',
-
                 m3 ? m3.value : ''
-
             ],
-
-            respuestaInfo: respInfo ? respInfo.value : ''
-
+            respuestaInfo: respInfo ? respInfo.value : '',
+            linkPreviewActivo: linkPreview ? linkPreview.checked : true,
+            tipoCampana: tipoCampana ? tipoCampana.value.trim() : '',
+            respuestasInfoPorTipo: respuestasInfoPorTipo || {}
         })
-
     }).catch(console.error);
-
 }
 
 var timerGuardado;
-['mensaje1','mensaje2','mensaje3','respuestaInfo'].forEach(function(id) {
+['mensaje1','mensaje2','mensaje3','respuestaInfo','tipoCampana'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener('input', function() {
         clearTimeout(timerGuardado);
         timerGuardado = setTimeout(autoguardar, 1000);
     });
 });
+
+// Guardar linkPreview cuando cambia el checkbox
+var linkPreviewCheckbox = document.getElementById('linkPreviewActivo');
+if (linkPreviewCheckbox) {
+    linkPreviewCheckbox.addEventListener('change', function() {
+        autoguardar();
+    });
+}
+
+// Inicializar: mostrar la respuesta del tipo de campaña actual
+setTimeout(function() {
+    editarRespuestaInfo(tipoCampanaActual);
+}, 100);
 </script>
 </body>
 </html>

@@ -623,7 +623,7 @@ async function enviarMensaje(
         // para no cambiar el comportamiento histórico.
         //------------------------------------------------------
         const opcionesEnvio = {
-            linkPreview: estado.linkPreviewActivo !== false
+            linkPreview: false
         };
 
         if(estado.imagenGuardada){

@@ -43,18 +43,36 @@
             border-radius: 40px;
             cursor: pointer;
         }
+        .btn-borrar-individual {
+            background: #f97316;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-left: 10px;
+        }
+        .btn-borrar-individual:hover {
+            background: #ea580c;
+        }
         .conversacion-card {
             background: #f8f9ff;
             border-radius: 20px;
             padding: 20px;
             margin-bottom: 15px;
             border-left: 5px solid #5351A5;
+            transition: opacity 0.3s;
+        }
+        .conversacion-card.borrando {
+            opacity: 0.5;
         }
         .conversacion-header {
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
             margin-bottom: 10px;
+            align-items: center;
         }
         .conversacion-nombre {
             font-weight: 700;
@@ -126,7 +144,7 @@
     <div id="conversaciones-lista">
         <% if (conversaciones && conversaciones.length > 0) { %>
             <% conversaciones.forEach(conv => { %>
-            <div class="conversacion-card" data-id="<%= conv.id %>">
+            <div class="conversacion-card" data-id="<%= conv.id %>" data-numero="<%= conv.numero || '' %>">
                 <div class="conversacion-header">
                     <div>
                         <span class="conversacion-nombre"><%= conv.nombre || 'Desconocido' %></span>
@@ -134,7 +152,12 @@
                         <span class="origen-badge">📲 Desde: <%= conv.origenNumero || 'desconocido' %></span>
                         <% if (conv.rubro) { %><span class="origen-badge">🏷️ <%= conv.rubro %></span><% } %>
                     </div>
-                    <span><%= conv.fecha || '' %></span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span><%= conv.fecha || '' %></span>
+                        <button class="btn-borrar-individual" onclick="borrarConversacion('<%= conv.id %>', '<%= (conv.numero || '').replace(/'/g, "\\'") %>')">
+                            🗑️
+                        </button>
+                    </div>
                 </div>
                 <div class="conversacion-mensaje">"<%= conv.mensaje || '' %>"</div>
                 <span class="estado"><%= conv.estado || 'pendiente' %></span>
@@ -165,25 +188,58 @@
     const container = document.getElementById('conversaciones-lista');
     const countBadge = document.getElementById('conversacion-count');
 
-    // Actualizar contador
     function actualizarContador() {
         const cards = container.querySelectorAll('.conversacion-card');
         countBadge.innerText = cards.length;
     }
 
-    // Eliminar estado vacío si existe
     function removerEmptyState() {
         const empty = container.querySelector('.empty-state');
         if (empty) empty.remove();
     }
 
-    socket.on('nueva_respuesta', (conv) => {
-        // Evitar duplicados por ID
-        const existing = container.querySelector(`[data-id="${conv.id}"]`);
-        if (existing) {
-            // Actualizar contenido si es necesario (opcional)
-            return;
+    // Borrar conversación individual
+    async function borrarConversacion(conversacionId, numero) {
+        if (!confirm('¿Eliminar esta conversación?')) return;
+
+        const card = container.querySelector(`[data-id="${conversacionId}"]`);
+        if (card) {
+            card.classList.add('borrando');
         }
+
+        try {
+            const res = await fetch('/api/mensajes/eliminar-conversacion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversacionId, numero })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                if (card) {
+                    card.style.opacity = '0';
+                    setTimeout(() => {
+                        card.remove();
+                        actualizarContador();
+                        if (container.querySelectorAll('.conversacion-card').length === 0) {
+                            container.innerHTML = '<div class="empty-state">📭 No hay conversaciones guardadas</div>';
+                        }
+                    }, 300);
+                }
+            } else {
+                alert('Error al eliminar: ' + (data.error || 'desconocido'));
+                if (card) card.classList.remove('borrando');
+            }
+        } catch (e) {
+            alert('Error de red: ' + e.message);
+            if (card) card.classList.remove('borrando');
+        }
+    }
+
+    socket.on('nueva_respuesta', (conv) => {
+        const existing = container.querySelector(`[data-id="${conv.id}"]`);
+        if (existing) return;
 
         removerEmptyState();
 
@@ -191,6 +247,7 @@
         const card = document.createElement('div');
         card.className = 'conversacion-card';
         card.dataset.id = conv.id;
+        card.dataset.numero = conv.numero || '';
         card.innerHTML = `
             <div class="conversacion-header">
                 <div>
@@ -199,7 +256,12 @@
                     <span class="origen-badge">📲 Desde: ${escapeHtml(origen)}</span>
                     ${conv.rubro ? `<span class="origen-badge">🏷️ ${escapeHtml(conv.rubro)}</span>` : ''}
                 </div>
-                <span>${escapeHtml(conv.fecha || '')}</span>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span>${escapeHtml(conv.fecha || '')}</span>
+                    <button class="btn-borrar-individual" onclick="borrarConversacion('${conv.id}', '${escapeHtml(conv.numero || '')}')">
+                        🗑️
+                    </button>
+                </div>
             </div>
             <div class="conversacion-mensaje">"${escapeHtml(conv.mensaje || '')}"</div>
             <span class="estado">${conv.estado || 'pendiente'}</span>
@@ -231,15 +293,16 @@
         }
     });
 
-    // Actualizar contador inicial
     actualizarContador();
 
     function escapeHtml(s) {
         if (!s) return '';
-        return s.replace(/[&<>]/g, function(m) {
+        return String(s).replace(/[&<>"']/g, function(m) {
             if (m === '&') return '&amp;';
             if (m === '<') return '&lt;';
             if (m === '>') return '&gt;';
+            if (m === '"') return '&quot;';
+            if (m === "'") return '&#39;';
             return m;
         });
     }
