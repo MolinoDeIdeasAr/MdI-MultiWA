@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-    limpiarNumeroTelefono
+limpiarNumeroTelefono
 } = require('./ai-utils');
 
 //==============================================================
@@ -10,62 +10,55 @@ const {
 
 const RESPUESTAS = {
 
-    diagnostico:
+diagnostico:
 
 `¡Gracias por tu confianza! 😊
-
 Vamos a comenzar con el Diagnóstico de Presencia Digital SIN CARGO.
-
 Para hacerlo necesito solamente:
-
 1️⃣ Nombre del negocio.
-
 2️⃣ El enlace de alguna red social (Instagram, Facebook o sitio web).
-
 Con eso preparo el diagnóstico y te envío el informe.`,
 
-    info:
+info:
 
 `Te cuento brevemente cómo trabajamos 😊
-
 📊 Realizamos un Diagnóstico de Presencia Digital SIN CARGO.
-
 Analizamos cómo aparece tu negocio en Google, Google Maps y redes sociales.
-
 Luego te mostramos oportunidades concretas para conseguir más consultas y mejorar tu presencia digital.
-
 Trabajamos principalmente en:
-
 ✅ Posicionamiento en Google
 ✅ Google Business
 ✅ Redes Sociales
 ✅ Diseño Web
 ✅ WhatsApp Marketing
-
 El servicio de posicionamiento tiene un único pago de $40.000.
-
 Si querés comenzar con el diagnóstico gratuito, enviame el enlace de alguna de tus redes sociales 👍`,
 
-    humano:
+humano:
 
 `Perfecto 😊
-
 Ya le aviso a un asesor para que continúe la conversación con vos.
-
 En breve se va a comunicar personalmente.`,
 
-    baja:
+baja:
 
 `Entiendo.
-
 Muchas gracias por tu tiempo 😊
-
 Que tengas un excelente día.`,
 
-    generica:
+//----------------------------------------------------------
+// NUEVO: respuesta para cuando dicen "equivocado"
+//----------------------------------------------------------
+equivocado:
+
+`¡Mil disculpas! 😅
+Parece que hubo una confusión con el número.
+No te vamos a volver a molestar.
+¡Que tengas un excelente día!`,
+
+generica:
 
 `¡Gracias por tu mensaje!
-
 Un asesor continuará la conversación con vos a la brevedad.`
 
 };
@@ -75,218 +68,235 @@ Un asesor continuará la conversación con vos a la brevedad.`
 //==============================================================
 
 function analizarReglas(
-    mensaje,
-    contexto = {}
+mensaje,
+contexto = {}
 ) {
 
-    const texto =
-        (mensaje || '')
-            .trim()
-            .toUpperCase();
-
-    const numero =
-        limpiarNumeroTelefono(
-            contexto.numero || ''
-        );
-
-    //----------------------------------------------------------
-    // MENSAJE VACÍO
-    //----------------------------------------------------------
-
-    if (texto.length === 0) {
-        return null;
-    }
-
-    //----------------------------------------------------------
-    // RESPUESTAS AFIRMATIVAS
-    //----------------------------------------------------------
-
-    const respuestasAfirmativas = [
-        'SI', 'SÍ', 'OK', 'DALE', 'GENIAL',
-        'PERFECTO', 'ME INTERESA', 'DE ACUERDO', 'BUENO'
-    ];
-
-    if (
-        respuestasAfirmativas.includes(texto) &&
-        texto.length <= 20
-    ) {
-        return {
-            estado: 'interesado_calido',
-            sentimiento: 'positivo',
-            intencion: 'solicitud_info',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'mensaje_followup',
-            proxima_accion_dias: 3,
-            respuesta_sugerida: RESPUESTAS.diagnostico,
-            notificarHumano: true,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // INFO — usa respuesta por tipo de campaña si existe
-    //----------------------------------------------------------
-
-    if (
-        texto === 'INFO' ||
-        texto.includes('INFORMACION') ||
-        texto.includes('INFORMACIÓN') ||
-        texto.includes('QUIERO INFO') ||
-        texto.includes('MAS INFO') ||
-        texto.includes('MÁS INFO')
-    ) {
-        // Buscar respuesta específica por tipo de campaña
-        const tipoCampana = contexto.tipoCampana || '';
-        const respuestasPorTipo = contexto.respuestasInfoPorTipo || {};
-
-        let respuestaInfo = respuestasPorTipo[tipoCampana]
-            || contexto.respuestaInfoPersonalizada
-            || RESPUESTAS.info;
-
-        // Si hay tipo de campaña pero no hay respuesta específica,
-        // agregar prefijo con el tipo de campaña
-        if (tipoCampana && !respuestasPorTipo[tipoCampana] && !contexto.respuestaInfoPersonalizada) {
-            respuestaInfo = `Te contacto por nuestra campaña de *${tipoCampana}*.\n\n` + RESPUESTAS.info;
-        }
-
-        return {
-            estado: 'interesado_calido',
-            sentimiento: 'positivo',
-            intencion: 'solicitud_info',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'mensaje_followup',
-            proxima_accion_dias: 3,
-            respuesta_sugerida: respuestaInfo,
-            notificarHumano: true,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // DIAGNÓSTICO
-    //----------------------------------------------------------
-
-    if (
-        texto.includes('DIAGNOSTICO') ||
-        texto.includes('DIAGNÓSTICO')
-    ) {
-        return {
-            estado: 'interesado_calido',
-            sentimiento: 'positivo',
-            intencion: 'solicitud_diagnostico',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'mensaje_followup',
-            proxima_accion_dias: 3,
-            respuesta_sugerida: RESPUESTAS.diagnostico,
-            notificarHumano: true,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // QUIERE HABLAR CON UNA PERSONA
-    //----------------------------------------------------------
-
-    if (
-        texto.includes('ASESOR') ||
-        texto.includes('PERSONA') ||
-        texto.includes('HUMANO') ||
-        texto.includes('LLAMAME') ||
-        texto.includes('LLÁMAME') ||
-        texto.includes('QUIERO HABLAR') ||
-        texto.includes('ME PODES LLAMAR') ||
-        texto.includes('ME PODÉS LLAMAR')
-    ) {
-        return {
-            estado: 'derivar_humano',
-            sentimiento: 'positivo',
-            intencion: 'hablar_humano',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'accion_humana',
-            proxima_accion_dias: 0,
-            respuesta_sugerida: RESPUESTAS.humano,
-            notificarHumano: true,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // NO INTERESADO
-    //----------------------------------------------------------
-
-    if (
-        texto.includes('NO ME INTERESA') ||
-        texto === 'NO' ||
-        texto.includes('NO QUIERO') ||
-        texto.includes('NO GRACIAS') ||
-        texto.includes('BAJA') ||
-        texto.includes('ELIMINAR') ||
-        texto.includes('BORRAR') ||
-        texto.includes('DEJEN DE ESCRIBIR')
-    ) {
-        return {
-            estado: 'baja',
-            sentimiento: 'negativo',
-            intencion: 'rechazo',
-            motivo_cierre: 'No interesado',
-            proxima_accion_tipo: 'cerrar',
-            proxima_accion_dias: 0,
-            respuesta_sugerida: RESPUESTAS.baja,
-            notificarHumano: false,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // AGRADECIMIENTO
-    //----------------------------------------------------------
-
-    if (
-        texto === 'GRACIAS' ||
-        texto === 'MUCHAS GRACIAS' ||
-        texto === 'GENIAL, GRACIAS'
-    ) {
-        return {
-            estado: 'conversacion_normal',
-            sentimiento: 'positivo',
-            intencion: 'agradecimiento',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'esperar',
-            proxima_accion_dias: 1,
-            respuesta_sugerida: '',
-            notificarHumano: false,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // DESPEDIDAS
-    //----------------------------------------------------------
-
-    if (
-        texto === 'CHAU' ||
-        texto === 'HASTA LUEGO' ||
-        texto === 'NOS VEMOS' ||
-        texto === 'SALUDOS'
-    ) {
-        return {
-            estado: 'conversacion_finalizada',
-            sentimiento: 'positivo',
-            intencion: 'despedida',
-            motivo_cierre: '',
-            proxima_accion_tipo: 'ninguna',
-            proxima_accion_dias: 0,
-            respuesta_sugerida: '',
-            notificarHumano: false,
-            numeroLimpio: numero
-        };
-    }
-
-    //----------------------------------------------------------
-    // SIN REGLA
-    //----------------------------------------------------------
-
-    return null;
+const texto =
+     (mensaje || '')
+         .trim()
+         .toUpperCase();
+ const numero =
+     limpiarNumeroTelefono(
+         contexto.numero || ''
+     );
+ //----------------------------------------------------------
+ // MENSAJE VACÍO
+ //----------------------------------------------------------
+ if (texto.length === 0) {
+     return null;
+ }
+ //----------------------------------------------------------
+ // RESPUESTAS AFIRMATIVAS
+ //----------------------------------------------------------
+ const respuestasAfirmativas = [
+     'SI', 'SÍ', 'OK', 'DALE', 'GENIAL',
+     'PERFECTO', 'ME INTERESA', 'DE ACUERDO', 'BUENO'
+ ];
+ if (
+     respuestasAfirmativas.includes(texto) &&
+     texto.length <= 20
+ ) {
+     return {
+         estado: 'interesado_calido',
+         sentimiento: 'positivo',
+         intencion: 'solicitud_info',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'mensaje_followup',
+         proxima_accion_dias: 3,
+         respuesta_sugerida: RESPUESTAS.diagnostico,
+         notificarHumano: true,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // INFO — usa respuesta por tipo de campaña si existe
+ //----------------------------------------------------------
+ if (
+     texto === 'INFO' ||
+     texto.includes('INFORMACION') ||
+     texto.includes('INFORMACIÓN') ||
+     texto.includes('QUIERO INFO') ||
+     texto.includes('MAS INFO') ||
+     texto.includes('MÁS INFO')
+ ) {
+     // Buscar respuesta específica por tipo de campaña
+     const tipoCampana = contexto.tipoCampana || '';
+     const respuestasPorTipo = contexto.respuestasInfoPorTipo || {};
+     let respuestaInfo = respuestasPorTipo[tipoCampana]
+         || contexto.respuestaInfoPersonalizada
+         || RESPUESTAS.info;
+     // Si hay tipo de campaña pero no hay respuesta específica,
+     // agregar prefijo con el tipo de campaña
+     if (tipoCampana && !respuestasPorTipo[tipoCampana] && !contexto.respuestaInfoPersonalizada) {
+         respuestaInfo = `Te contacto por nuestra campaña de *${tipoCampana}*.\n\n` + RESPUESTAS.info;
+     }
+     return {
+         estado: 'interesado_calido',
+         sentimiento: 'positivo',
+         intencion: 'solicitud_info',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'mensaje_followup',
+         proxima_accion_dias: 3,
+         respuesta_sugerida: respuestaInfo,
+         notificarHumano: true,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // DIAGNÓSTICO
+ //----------------------------------------------------------
+ if (
+     texto.includes('DIAGNOSTICO') ||
+     texto.includes('DIAGNÓSTICO')
+ ) {
+     return {
+         estado: 'interesado_calido',
+         sentimiento: 'positivo',
+         intencion: 'solicitud_diagnostico',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'mensaje_followup',
+         proxima_accion_dias: 3,
+         respuesta_sugerida: RESPUESTAS.diagnostico,
+         notificarHumano: true,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // QUIERE HABLAR CON UNA PERSONA
+ //----------------------------------------------------------
+ if (
+     texto.includes('ASESOR') ||
+     texto.includes('PERSONA') ||
+     texto.includes('HUMANO') ||
+     texto.includes('LLAMAME') ||
+     texto.includes('LLÁMAME') ||
+     texto.includes('QUIERO HABLAR') ||
+     texto.includes('ME PODES LLAMAR') ||
+     texto.includes('ME PODÉS LLAMAR')
+ ) {
+     return {
+         estado: 'derivar_humano',
+         sentimiento: 'positivo',
+         intencion: 'hablar_humano',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'accion_humana',
+         proxima_accion_dias: 0,
+         respuesta_sugerida: RESPUESTAS.humano,
+         notificarHumano: true,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // NUEVO: EQUIVOCADO / CONFUSIÓN DE NÚMERO
+ //----------------------------------------------------------
+ // Se detecta cuando alguien responde que se equivocaron de
+ // número, que no es la persona buscada, o que hubo un error.
+ // Se responde con una disculpa y se marca como baja para no
+ // volver a escribirle. Es diferente de "no interesado" porque
+ // acá la persona no está rechazando el servicio, sino que
+ // indica que el mensaje no era para ella.
+ //----------------------------------------------------------
+ if (
+     texto.includes('EQUIVOCADO') ||
+     texto.includes('EQUIVOCADA') ||
+     texto.includes('ME EQUIVOQUE') ||
+     texto.includes('ME EQUIVOQUÉ') ||
+     texto.includes('NO SOY YO') ||
+     texto.includes('NO SOY LA PERSONA') ||
+     texto.includes('TE CONFUNDISTE') ||
+     texto.includes('SE CONFUNDIERON') ||
+     texto.includes('ERROR DE NÚMERO') ||
+     texto.includes('ERROR DE NUMERO') ||
+     texto.includes('ESTE NO ES MI NÚMERO') ||
+     texto.includes('ESTE NO ES MI NUMERO') ||
+     texto.includes('TE EQUIVOCASTE') ||
+     texto.includes('SE EQUIVOCARON') ||
+     texto.includes('NÚMERO EQUIVOCADO') ||
+     texto.includes('NUMERO EQUIVOCADO')
+ ) {
+     return {
+         estado: 'baja',
+         sentimiento: 'neutral',
+         intencion: 'numero_equivocado',
+         motivo_cierre: 'Número equivocado',
+         proxima_accion_tipo: 'cerrar',
+         proxima_accion_dias: 0,
+         respuesta_sugerida: RESPUESTAS.equivocado,
+         notificarHumano: false,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // NO INTERESADO
+ //----------------------------------------------------------
+ if (
+     texto.includes('NO ME INTERESA') ||
+     texto === 'NO' ||
+     texto.includes('NO QUIERO') ||
+     texto.includes('NO GRACIAS') ||
+     texto.includes('BAJA') ||
+     texto.includes('ELIMINAR') ||
+     texto.includes('BORRAR') ||
+     texto.includes('DEJEN DE ESCRIBIR')
+ ) {
+     return {
+         estado: 'baja',
+         sentimiento: 'negativo',
+         intencion: 'rechazo',
+         motivo_cierre: 'No interesado',
+         proxima_accion_tipo: 'cerrar',
+         proxima_accion_dias: 0,
+         respuesta_sugerida: RESPUESTAS.baja,
+         notificarHumano: false,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // AGRADECIMIENTO
+ //----------------------------------------------------------
+ if (
+     texto === 'GRACIAS' ||
+     texto === 'MUCHAS GRACIAS' ||
+     texto === 'GENIAL, GRACIAS'
+ ) {
+     return {
+         estado: 'conversacion_normal',
+         sentimiento: 'positivo',
+         intencion: 'agradecimiento',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'esperar',
+         proxima_accion_dias: 1,
+         respuesta_sugerida: '',
+         notificarHumano: false,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // DESPEDIDAS
+ //----------------------------------------------------------
+ if (
+     texto === 'CHAU' ||
+     texto === 'HASTA LUEGO' ||
+     texto === 'NOS VEMOS' ||
+     texto === 'SALUDOS'
+ ) {
+     return {
+         estado: 'conversacion_finalizada',
+         sentimiento: 'positivo',
+         intencion: 'despedida',
+         motivo_cierre: '',
+         proxima_accion_tipo: 'ninguna',
+         proxima_accion_dias: 0,
+         respuesta_sugerida: '',
+         notificarHumano: false,
+         numeroLimpio: numero
+     };
+ }
+ //----------------------------------------------------------
+ // SIN REGLA
+ //----------------------------------------------------------
+ return null;
 }
 
 //==============================================================
@@ -294,6 +304,6 @@ function analizarReglas(
 //==============================================================
 
 module.exports = {
-    analizarReglas,
-    RESPUESTAS
+analizarReglas,
+RESPUESTAS
 };

@@ -121,10 +121,10 @@
                             </form>
                         <% } %>
                         <% if (!inst.listo) { %>
-                            <button type="button" onclick="forzarDesconexion('<%= inst.id %>')"
-                                class="btn btn-warning btn-sm" title="Limpiar sesión trabada">
-                                🔧 Forzar limpieza
-                            </button>
+                            <button type="button" onclick="forzarDesconexion('<%= inst.id %>', event)"
+    class="btn btn-warning btn-sm" title="Limpiar sesión trabada">
+    🔧 Forzar limpieza
+</button>
                         <% } %>
                         <form action="/desconectar-instancia" method="POST" style="display:inline;"
                               onsubmit="return confirm('¿Eliminar esta instancia?')">
@@ -319,9 +319,9 @@
 //====================================================
 // FORZAR DESCONEXIÓN
 //====================================================
-function forzarDesconexion(instanceId) {
+function forzarDesconexion(instanceId, evt) {
     if (!confirm('¿Forzar la limpieza de esta sesión trabada? Se borrará la sesión y tendrás que escanear el QR de nuevo.')) return;
-    var btn = event.target;
+    var btn = evt ? evt.target : document.activeElement;
     btn.disabled = true;
     btn.textContent = '⏳...';
     fetch('/forzar-desconexion', {

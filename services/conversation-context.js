@@ -142,8 +142,10 @@ class ConversationContext {
         this.debeNotificarAsesor =
             Boolean(analisis?.notificarHumano);
         this.debeRegistrarBaja =
-            this.estadoIA === 'cerrado_perdido' ||
-            this.intencionIA === 'rechazo_firme';
+    this.estadoIA === 'cerrado_perdido' ||
+    this.estadoIA === 'baja' ||
+    this.intencionIA === 'rechazo_firme' ||
+    this.intencionIA === 'numero_equivocado';
         return this;
     }
 

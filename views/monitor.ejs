@@ -21,7 +21,7 @@ h1{color:#38bdf8;margin-bottom:20px;}
 .info-box h3{color:#38bdf8;margin-bottom:10px;}
 .info-box table{width:100%;}
 .info-box td{padding:6px 0;color:#cbd5e1;}
-.status{padding:12px;border-radius:8px;font-weight:bold;text-align:center;margin-bottom:20px;}
+.status{padding:12px;border-radius:8px;font-weight:bold;text-align:center;margin-bottom:12px;}
 .online{background:#14532d;}
 .offline{background:#7f1d1d;}
 .warning{background:#78350f;}
@@ -40,15 +40,22 @@ tbody tr:hover{background:#162032;}
 .badge-ok{background:#14532d;}
 .badge-pause{background:#78350f;}
 .badge-stop{background:#7f1d1d;}
+.campana-badge{display:inline-block;background:#1e3a5f;color:#38bdf8;padding:4px 14px;border-radius:20px;font-size:14px;margin-left:8px;border:1px solid #38bdf8;}
+.rubro-badge{display:inline-block;background:#3b2f1e;color:#fbbf24;padding:4px 14px;border-radius:20px;font-size:14px;margin-left:8px;border:1px solid #fbbf24;}
+.estado-conexion{display:flex;justify-content:space-between;align-items:center;}
+.estado-conexion .numero{font-size:14px;color:#94a3b8;font-weight:normal;}
 </style>
 </head>
 <body>
 <div class="container">
 
+<!-- TÍTULO DINÁMICO: se actualiza con cada fetch -->
 <h1>
 📊 Monitor de Campañas
-<% if (estado && estado.rubro) { %> · <%= estado.rubro %><% } %>
-<% if (estado && estado.tipoCampana) { %> · 🏷️ <%= estado.tipoCampana %><% } %>
+<span id="tituloCampana">
+<% if (estado && estado.rubro) { %><span class="rubro-badge">🏢 <%= estado.rubro %></span><% } %>
+<% if (estado && estado.tipoCampana) { %><span class="campana-badge">🏷️ <%= estado.tipoCampana %></span><% } %>
+</span>
 </h1>
 
 <div class="card">
@@ -64,7 +71,13 @@ tbody tr:hover{background:#162032;}
 </form>
 </div>
 
-<div id="estadoWhatsapp" class="status offline">Sin conexión</div>
+<!-- NUEVO: CARTEL DE ESTADO DE CONEXIÓN DE LA INSTANCIA -->
+<div id="estadoConexion" class="status offline">
+🔴 Instancia desconectada
+</div>
+
+<!-- ESTADO DE LA CAMPAÑA -->
+<div id="estadoWhatsapp" class="status offline">Sin actividad</div>
 
 <div class="grid">
 <div class="stat"><h2 id="stTotal">0</h2><p>Total</p></div>
@@ -170,12 +183,52 @@ tbody tr:hover{background:#162032;}
 const socket = io();
 const instanceId = "<%= activeId %>";
 
+// Función para escapar HTML y evitar inyección
+function esc(s){
+    if(s===null || s===undefined) return '';
+    return String(s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;');
+}
+
 async function actualizar(){
     try{
         const r = await fetch(`/api/monitor/progreso?instanceId=${instanceId}`);
         const data = await r.json();
         if(!data.ok) return;
 
+        //--------------------------------------------------
+        // NUEVO: ESTADO DE CONEXIÓN DE LA INSTANCIA
+        //--------------------------------------------------
+        const conexion = document.getElementById('estadoConexion');
+        if(data.listo){
+            conexion.className = "status online estado-conexion";
+            const num = data.numeroWhatsApp ? ` — ${esc(data.numeroWhatsApp)}` : '';
+            conexion.innerHTML = `🟢 Instancia conectada<span class="numero">${num}</span>`;
+        } else {
+            conexion.className = "status offline";
+            conexion.innerHTML = "🔴 Instancia desconectada";
+        }
+
+        //--------------------------------------------------
+        // TÍTULO DINÁMICO (campaña + rubro)
+        //--------------------------------------------------
+        const titulo = document.getElementById('tituloCampana');
+        if(titulo){
+            let htmlTitulo = '';
+            if(data.rubro){
+                htmlTitulo += `<span class="rubro-badge">🏢 ${esc(data.rubro)}</span>`;
+            }
+            if(data.tipoCampana){
+                htmlTitulo += `<span class="campana-badge">🏷️ ${esc(data.tipoCampana)}</span>`;
+            }
+            titulo.innerHTML = htmlTitulo;
+        }
+
+        //--------------------------------------------------
+        // PROGRESO
+        //--------------------------------------------------
         const p = data.progreso;
         document.getElementById('stTotal').innerText = p.total || 0;
         document.getElementById('stActual').innerText = p.actual || 0;
@@ -186,6 +239,9 @@ async function actualizar(){
         document.getElementById('barra').style.width = p.porcentaje + "%";
         document.getElementById('porcentaje').innerText = p.porcentaje + "%";
 
+        //--------------------------------------------------
+        // ESTADO DE LA CAMPAÑA
+        //--------------------------------------------------
         const estado = document.getElementById('estadoWhatsapp');
         if(data.enviando){
             estado.className="status online";
@@ -198,6 +254,9 @@ async function actualizar(){
             estado.innerHTML="⏸ Sin actividad";
         }
 
+        //--------------------------------------------------
+        // SCHEDULER
+        //--------------------------------------------------
         const s = data.scheduler || {};
         document.getElementById('schEstado').innerText = s.status || '-';
         document.getElementById('schActual').innerText = s.actual ?? '-';
@@ -205,21 +264,27 @@ async function actualizar(){
         document.getElementById('schContacto').innerText = s.contactoActual || '-';
         document.getElementById('schNext').innerText = s.nextRun ? new Date(s.nextRun).toLocaleTimeString() : '-';
 
+        //--------------------------------------------------
+        // ANTIBAN
+        //--------------------------------------------------
         const a = data.antiban || {};
         document.getElementById('abHoy').innerText = a.mensajesHoy ?? 0;
         document.getElementById('abHora').innerText = a.mensajesHora ?? 0;
         document.getElementById('abMotivo').innerText = a.motivo || '-';
         document.getElementById('abTiempo').innerText = a.tiempoRestante ? a.tiempoRestante + " s" : "-";
 
+        //--------------------------------------------------
         // CONTACTOS
+        //--------------------------------------------------
         let html='';
         (data.contactos || []).forEach((c,i)=>{
+            const rubroContacto = c.rubro || data.rubro || '-';
             html+=`<tr>
                 <td>${i+1}</td>
-                <td>${c.nombre || '-'}</td>
-                <td>${c.numero || '-'}</td>
-                <td>${c.rubro || '-'}</td>
-                <td>${c.estadoEnvio || '-'}</td>
+                <td>${esc(c.nombre) || '-'}</td>
+                <td>${esc(c.numero) || '-'}</td>
+                <td>${esc(rubroContacto)}</td>
+                <td>${esc(c.estadoEnvio) || '-'}</td>
                 <td>${c.fechaEnvio ? new Date(c.fechaEnvio).toLocaleString('es-AR',{timeZone:'America/Argentina/Buenos_Aires',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '-'}</td>
             </tr>`;
         });
@@ -228,13 +293,15 @@ async function actualizar(){
         }
         document.getElementById('tablaContactos').innerHTML=html;
 
+        //--------------------------------------------------
         // FALLIDOS
+        //--------------------------------------------------
         let htmlFallidos='';
         (data.fallidos || []).forEach((f)=>{
             htmlFallidos+=`<tr>
-                <td>${f.nombre || 'Sin nombre'}</td>
-                <td>${f.numero || 'Sin número'}</td>
-                <td style="color:#ef4444;">${f.motivo || 'Error desconocido'}</td>
+                <td>${esc(f.nombre) || 'Sin nombre'}</td>
+                <td>${esc(f.numero) || 'Sin número'}</td>
+                <td style="color:#ef4444;">${esc(f.motivo) || 'Error desconocido'}</td>
             </tr>`;
         });
         if(htmlFallidos===''){
@@ -251,8 +318,44 @@ setInterval(actualizar, 1000);
 actualizar();
 
 document.getElementById('btnActualizar').onclick=actualizar;
-document.getElementById('btnPausar').onclick=()=>{ fetch('/pausar',{method:'POST'}); };
-document.getElementById('btnDetener').onclick=()=>{ if(!confirm("¿Detener campaña?")) return; fetch('/detener',{method:'POST'}); };
+
+document.getElementById('btnPausar').onclick=()=>{
+    fetch('/pausar',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ instanceId: instanceId })
+    })
+    .then(r=>r.json())
+    .then(d=>{
+        if(d.ok){
+            alert('⏸ Campaña pausada');
+            actualizar();
+        } else {
+            alert('❌ ' + (d.error || 'No se pudo pausar'));
+        }
+    })
+    .catch(e=>alert('❌ ' + e.message));
+};
+
+document.getElementById('btnDetener').onclick=()=>{
+    if(!confirm("¿Detener campaña?")) return;
+    fetch('/detener',{
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ instanceId: instanceId })
+    })
+    .then(r=>r.json())
+    .then(d=>{
+        if(d.ok){
+            alert('⛔ Campaña detenida');
+            actualizar();
+        } else {
+            alert('❌ ' + (d.error || 'No se pudo detener'));
+        }
+    })
+    .catch(e=>alert('❌ ' + e.message));
+};
+
 document.getElementById('instance').onchange=function(){ location.href="/monitor?instanceId="+this.value; };
 
 socket.on("server_log", log=>{
