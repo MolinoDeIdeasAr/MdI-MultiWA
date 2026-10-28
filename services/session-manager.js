@@ -65,7 +65,17 @@ const {
     eliminarInstancia
 } = require('./instancias-persistencia');
 const socketNotifier =
-    require('./socket-notifier');
+require('./socket-notifier');
+
+//==============================================================
+// CAPA ANTI-BAN (NUEVO v3.6.0)
+//==============================================================
+let antiBaneo = null;
+try {
+    antiBaneo = require('../config/anti-baneo');
+} catch (err) {
+    console.warn('⚠ anti-baneo.js no disponible desde session-manager');
+}
 
 //==============================================================
 // CONSTANTES
@@ -402,31 +412,45 @@ async function startSessionInterno(
 
     limpiarLocksSesion(instanceId);
 
-    //----------------------------------------------------------
-    // Crear Cliente
-    //----------------------------------------------------------
+ //----------------------------------------------------------
+ // CAPA ANTI-BAN: User-Agent estable + anti-automation
+ //----------------------------------------------------------
+ const userAgent = antiBaneo && typeof antiBaneo.getUserAgentParaInstancia === 'function'
+     ? antiBaneo.getUserAgentParaInstancia(instanceId)
+     : null;
 
-    const client = new Client({
-        authStrategy: new LocalAuth({
-            clientId: instanceId,
-            dataPath: SESSIONS_DIR
-        }),
-        puppeteer: {
-            headless: true,
-            executablePath: findChromePath(),
-            timeout: 60000,
-            protocolTimeout: 60000,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-crash-reporter',
-                '--disable-breakpad',
-                '--no-crash-upload'
-            ]
-        }
-    });
+ const puppeteerArgs = [
+     '--no-sandbox',
+     '--disable-setuid-sandbox',
+     '--disable-dev-shm-usage',
+     '--disable-gpu',
+     '--disable-crash-reporter',
+     '--disable-breakpad',
+     '--no-crash-upload',
+     '--disable-blink-features=AutomationControlled'
+ ];
+
+ if (userAgent) {
+     puppeteerArgs.push(`--user-agent=${userAgent}`);
+     console.log(`🧭 User-Agent para ${instanceId}: ${userAgent.substring(0, 60)}...`);
+ }
+
+ //----------------------------------------------------------
+ // Crear Cliente
+ //----------------------------------------------------------
+ const client = new Client({
+     authStrategy: new LocalAuth({
+         clientId: instanceId,
+         dataPath: SESSIONS_DIR
+     }),
+     puppeteer: {
+         headless: true,
+         executablePath: findChromePath(),
+         timeout: 60000,
+         protocolTimeout: 60000,
+         args: puppeteerArgs
+     }
+ });
 
     //----------------------------------------------------------
     // Registrar cliente

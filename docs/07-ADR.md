@@ -477,9 +477,47 @@ crear un nuevo ADR.
 Nunca modificar el anterior.
 
 Los ADR representan la historia arquitectónica del proyecto.
+"La arquitectura no solo consiste en tomar buenas decisiones.
+También consiste en recordar por qué fueron tomadas."
 
 ---
 
-"La arquitectura no solo consiste en tomar buenas decisiones.
+ADR-010
+Capa anti-ban conductual sin IPs pagas
+Estado
+Aceptado
+Fecha
+28 de octubre de 2026
+Autor
+Equipo MdI MultiWA
 
-También consiste en recordar por qué fueron tomadas."
+Problema
+Las cuentas de WhatsApp estaban siendo suspendidas por detección de comportamiento automatizado.
+No hay presupuesto para proxies residenciales ni IPs dedicadas.
+Una VPN global compartiría IP entre todas las instancias, generando riesgo de baneo por asociación.
+
+Alternativas
+1. VPN global a nivel sistema operativo → rechazada (IP compartida).
+2. Proxies gratuitos / públicos / Tor → rechazados (IP sucia o rotativa).
+3. Capa conductual centralizada → aceptada.
+
+Decisión
+Se refuerza la capa conductual existente, sin tocar CRM ni flujos:
+• Persistencia de contadores en data/contadores-antibaneo.json.
+• Registro central de envío para evitar doble conteo.
+• User-Agent estable por instancia (hash de instanceId).
+• --disable-blink-features=AutomationControlled en Puppeteer.
+• Duración de escritura estimada por palabras/minuto (18-35 wpm).
+• Pausa mental previa a la escritura.
+
+Restricciones
+• session-manager.js sigue siendo el único creador de new Client()
+  según ADR-001.
+• No se modifica el modelo de datos del CRM según 06-DATOS.md.
+• No se introduce dependencias de pago ni de red.
+
+Consecuencias
+✔ Menor velocidad de envío, mayor naturalidad.
+✔ Los límites sobreviven a reinicios y a reanudación automática.
+✘ No elimina el riesgo de suspensión.
+✘ No resuelve reputación de IP: queda como decisión futura (ADR-011).

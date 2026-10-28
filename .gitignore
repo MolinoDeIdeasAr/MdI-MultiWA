@@ -1,3 +1,7 @@
+# ==========================
+# MdI MultiWA - .gitignore
+# ==========================
+
 # Dependencias
 node_modules/
 
@@ -25,9 +29,6 @@ desktop.ini
 # VS Code
 .vscode/
 
-# Reportes temporales
-reportes/*.tmp
-
 # Archivos de respaldo
 *.bak
 *.old
@@ -43,59 +44,37 @@ __pycache__/
 # Archivos privados
 claves.pdf
 *.lnk
-
-# Continuation
 .continue/
+.clinerules
 
 # Excels temporales
 archivo_drive.xlsx
 
 # Reportes
+reportes/
 *.csv
 
 # ==========================
-# DATOS PRIVADOS MdI MultiWA
+# DATOS PRIVADOS
 # ==========================
-
 users.json
 estado.json
 estado_guardado.json
 historial_numeros.json
 CRM_MdI.xlsx
 CRM_Molino_Ideas_Master.xlsx
-archivo_drive.xlsx
 MdI_MultiWA_Seguimiento.docx
-claves.pdf
-*.lnk
-.continue/
-# Datos privados
-data/
-reportes/
 
-# CRM
-CRM_*.xlsx
-archivo_drive.xlsx
+# TODA la carpeta data/ excepto .gitkeep
+data/*
+!data/.gitkeep
 
-# Documentos internos
-*.docx
-*.pdf
+# Imágenes de campaña
+uploads/*.jpg
+uploads/*.png
+uploads/*.jpeg
+uploads/*.gif
 
-# Configuración personal
-.clinerules
-
-# Carpetas privadas MdI MultiWA
-data/
-reportes/
-
-# Configuración privada
-config/
-
-# Documentos internos
-CRM_MdI.xlsx
-CRM_Molino_Ideas_Master.xlsx
-archivo_drive.xlsx
-MdI_MultiWA_Seguimiento.docx
-claves.pdf
-*.lnk
-.continue/
-.clinerules
+# Archivos temporales
+estructura-proyecto.txt
+arbol-proyecto.txt

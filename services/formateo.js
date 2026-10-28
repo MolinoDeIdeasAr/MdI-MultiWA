@@ -74,9 +74,23 @@ function extraerIdGoogleSheets(url) {
 }
 
 function getTiempoEscritura(mensaje) {
-    const texto = String(mensaje || '');
-    const base = texto.length * (40 + Math.random() * 30);
-    return Math.min(Math.max(base, 3000), 10000);
+    const texto = String(mensaje || '').trim();
+    if (!texto) return 2500;
+    
+    const palabras = texto.split(/\s+/).length;
+    
+    // Velocidad humana: 18-35 palabras por minuto
+    const wpm = 18 + Math.random() * 17;
+    
+    // Tiempo base en segundos
+    let segundos = (palabras / wpm) * 60;
+    
+    // Ruido aleatorio (±25%)
+    segundos *= (0.75 + Math.random() * 0.5);
+    
+    // Convertir a ms y clampar
+    const ms = segundos * 1000;
+    return Math.min(Math.max(ms, 2500), 15000);
 }
 
 function generarDelayHumano(indiceContacto, totalContactos) {
@@ -128,8 +142,12 @@ async function simularEscrituraHumana(client, chatId, mensaje) {
                 }
             }
         }
-        if (chat && typeof chat.sendStateTyping === 'function') {
-            await chat.sendStateTyping();
+if (chat && typeof chat.sendStateTyping === 'function') {
+    // Pausa mental: el humano piensa antes de empezar a escribir
+    const pausaMental = 800 + Math.random() * 2200;
+    await new Promise(resolve => setTimeout(resolve, pausaMental));
+    
+    await chat.sendStateTyping();
 
             const palabras = mensaje.split(' ');
             let erroresCometidos = 0;
@@ -195,5 +213,6 @@ module.exports = {
     procesarSpintax,
     extraerIdGoogleSheets,
     simularEscrituraHumana,
-    generarDelayHumano
+    generarDelayHumano,
+    getTiempoEscritura
 };

@@ -9,42 +9,35 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
-        .container { max-width: 700px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .container { max-width: 900px; margin: 0 auto; background: #1e293b; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         h1 { color: #38bdf8; display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
         .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 25px; }
-
         .seccion { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-bottom: 18px; }
         .seccion h3 { color: #f8fafc; font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-
+        .seccion-nueva { border-left: 4px solid #28a745; }
         .campo { margin-bottom: 16px; }
         .campo:last-child { margin-bottom: 0; }
         .campo label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
         .campo .ayuda { font-size: 11px; color: #64748b; margin-top: 4px; }
-        .campo input { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 14px; }
-        .campo input:focus { outline: none; border-color: #38bdf8; }
-
+        .campo input[type="number"] { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #f8fafc; font-size: 14px; }
+        .campo input[type="number"]:focus { outline: none; border-color: #38bdf8; }
+        .campo-check { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .campo-check input[type="checkbox"] { width: 20px; height: 20px; cursor: pointer; }
+        .campo-check label { margin: 0; cursor: pointer; font-size: 13px; color: #f8fafc; }
         .fila-doble { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-
         .preset-buttons { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
         .preset-btn { background: #334155; color: #f8fafc; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: background 0.2s; }
         .preset-btn:hover { background: #475569; }
         .preset-btn.activo { background: #38bdf8; color: #0f172a; font-weight: bold; }
-
         .btn-guardar { width: 100%; padding: 14px; background: #15803d; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .btn-guardar:hover { opacity: 0.9; }
         .btn-guardar:disabled { opacity: 0.5; cursor: not-allowed; }
-
         .alerta { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; display: none; }
         .alerta-ok { background: #15803d; color: #dcfce7; }
         .alerta-err { background: #7f1d1d; color: #fee2e2; }
-
-        .resumen { background: #0f172a; border: 1px solid #38bdf8; border-radius: 10px; padding: 16px; margin-top: 20px; font-size: 13px; color: #cbd5e1; line-height: 1.7; }
-        .resumen strong { color: #38bdf8; }
-
         .nav { margin-top: 25px; text-align: center; }
         .nav a { color: #38bdf8; text-decoration: none; margin: 0 10px; }
         .nav a:hover { text-decoration: underline; }
-
         .warning-box { background: #78350f; border: 1px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 12px; color: #fef3c7; }
     </style>
 </head>
@@ -123,17 +116,130 @@
             </div>
         </div>
 
+        <!-- NUEVO 1: PAUSA LARGA -->
+        <div class="seccion seccion-nueva">
+            <h3>🛌 Pausa larga cada X mensajes</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="PAUSA_LARGA_ACTIVADA" id="PAUSA_LARGA_ACTIVADA" <%= config.PAUSA_LARGA_ACTIVADA ? 'checked' : '' %>>
+                <label for="PAUSA_LARGA_ACTIVADA">Activar pausa larga cada X mensajes</label>
+            </div>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Cada cuántos mensajes</label>
+                    <input type="number" name="PAUSA_LARGA_CADA" id="PAUSA_LARGA_CADA" min="1" value="<%= config.PAUSA_LARGA_CADA %>">
+                </div>
+            </div>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Pausa mínima (min)</label>
+                    <input type="number" name="PAUSA_LARGA_MIN_MIN" id="PAUSA_LARGA_MIN_MIN" min="1" value="<%= Math.round(config.PAUSA_LARGA_MIN / 60000) %>">
+                </div>
+                <div class="campo">
+                    <label>Pausa máxima (min)</label>
+                    <input type="number" name="PAUSA_LARGA_MAX_MIN" id="PAUSA_LARGA_MAX_MIN" min="1" value="<%= Math.round(config.PAUSA_LARGA_MAX / 60000) %>">
+                </div>
+            </div>
+        </div>
+
+        <!-- NUEVO 2: LÍMITE SEMANAL -->
+        <div class="seccion seccion-nueva">
+            <h3>📆 Límite semanal</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="LIMITE_SEMANAL_ACTIVADO" id="LIMITE_SEMANAL_ACTIVADO" <%= config.LIMITE_SEMANAL_ACTIVADO ? 'checked' : '' %>>
+                <label for="LIMITE_SEMANAL_ACTIVADO">Activar límite semanal</label>
+            </div>
+            <div class="campo">
+                <label>Máximo por semana</label>
+                <input type="number" name="MAX_MENSAJES_SEMANA" id="MAX_MENSAJES_SEMANA" min="1" value="<%= config.MAX_MENSAJES_SEMANA %>">
+                <div class="ayuda">Se resetea cada lunes</div>
+            </div>
+        </div>
+
+        <!-- NUEVO 3 + 9: MENSAJES -->
+        <div class="seccion seccion-nueva">
+            <h3>🔁 Gestión de mensajes</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="EVITAR_MENSAJE_REPETIDO" id="EVITAR_MENSAJE_REPETIDO" <%= config.EVITAR_MENSAJE_REPETIDO ? 'checked' : '' %>>
+                <label for="EVITAR_MENSAJE_REPETIDO">Evitar enviar el mismo mensaje dos veces seguidas</label>
+            </div>
+            <div class="campo-check">
+                <input type="checkbox" name="ROTACION_MENSAJES" id="ROTACION_MENSAJES" <%= config.ROTACION_MENSAJES ? 'checked' : '' %>>
+                <label for="ROTACION_MENSAJES">Rotar mensajes (usar todos antes de repetir)</label>
+            </div>
+            <div class="campo-check">
+                <input type="checkbox" name="VARIACION_LONGITUD" id="VARIACION_LONGITUD" <%= config.VARIACION_LONGITUD ? 'checked' : '' %>>
+                <label for="VARIACION_LONGITUD">Variar longitud (no enviar 3+ mensajes de largo similar seguidos)</label>
+            </div>
+        </div>
+
+        <!-- NUEVO 4 + 5: RESPUESTAS -->
+        <div class="seccion seccion-nueva">
+            <h3>💬 Gestión de respuestas</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="NO_REENVIAR_RESPONDIDOS" id="NO_REENVIAR_RESPONDIDOS" <%= config.NO_REENVIAR_RESPONDIDOS ? 'checked' : '' %>>
+                <label for="NO_REENVIAR_RESPONDIDOS">Nunca reenviar a quien ya respondió</label>
+            </div>
+            <div class="campo-check">
+                <input type="checkbox" name="COOLDOWN_TRAS_RESPUESTA_ACTIVADO" id="COOLDOWN_TRAS_RESPUESTA_ACTIVADO" <%= config.COOLDOWN_TRAS_RESPUESTA_ACTIVADO ? 'checked' : '' %>>
+                <label for="COOLDOWN_TRAS_RESPUESTA_ACTIVADO">Activar cooldown tras respuesta</label>
+            </div>
+            <div class="campo">
+                <label>Cooldown (minutos)</label>
+                <input type="number" name="COOLDOWN_TRAS_RESPUESTA_MIN" id="COOLDOWN_TRAS_RESPUESTA_MIN" min="1" value="<%= Math.round(config.COOLDOWN_TRAS_RESPUESTA / 60000) %>">
+                <div class="ayuda">Tiempo a esperar tras respuesta antes de volver a escribir</div>
+            </div>
+        </div>
+
+        <!-- NUEVO 6: ALMUERZO -->
+        <div class="seccion seccion-nueva">
+            <h3>🍽️ Pausa en horario de almuerzo</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="PAUSA_ALMUERZO_ACTIVADA" id="PAUSA_ALMUERZO_ACTIVADA" <%= config.PAUSA_ALMUERZO_ACTIVADA ? 'checked' : '' %>>
+                <label for="PAUSA_ALMUERZO_ACTIVADA">No enviar durante el almuerzo</label>
+            </div>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Hora inicio almuerzo</label>
+                    <input type="number" name="ALMUERZO_INICIO" id="ALMUERZO_INICIO" min="0" max="23" value="<%= config.ALMUERZO_INICIO %>">
+                </div>
+                <div class="campo">
+                    <label>Hora fin almuerzo</label>
+                    <input type="number" name="ALMUERZO_FIN" id="ALMUERZO_FIN" min="0" max="23" value="<%= config.ALMUERZO_FIN %>">
+                </div>
+            </div>
+        </div>
+
+        <!-- NUEVO 8: ERRORES CONSECUTIVOS -->
+        <div class="seccion seccion-nueva">
+            <h3>⚠️ Pausa tras errores consecutivos</h3>
+            <div class="fila-doble">
+                <div class="campo">
+                    <label>Máx. errores consecutivos</label>
+                    <input type="number" name="MAX_ERRORES_CONSECUTIVOS" id="MAX_ERRORES_CONSECUTIVOS" min="1" value="<%= config.MAX_ERRORES_CONSECUTIVOS %>">
+                </div>
+                <div class="campo">
+                    <label>Pausa tras errores (min)</label>
+                    <input type="number" name="PAUSA_TRAS_ERRORES_MIN" id="PAUSA_TRAS_ERRORES_MIN" min="1" value="<%= Math.round(config.PAUSA_TRAS_ERRORES / 60000) %>">
+                </div>
+            </div>
+        </div>
+
+        <!-- NUEVO 10: LÍMITE POR FRANJA -->
+        <div class="seccion seccion-nueva">
+            <h3>🕐 Límite por franja horaria</h3>
+            <div class="campo-check">
+                <input type="checkbox" name="LIMITE_FRANJA_ACTIVADO" id="LIMITE_FRANJA_ACTIVADO" <%= config.LIMITE_FRANJA_ACTIVADO ? 'checked' : '' %>>
+                <label for="LIMITE_FRANJA_ACTIVADO">Activar límite por franja (franjas de 3hs)</label>
+            </div>
+            <div class="campo">
+                <label>Máximo por franja</label>
+                <input type="number" name="MAX_MENSAJES_FRANJA" id="MAX_MENSAJES_FRANJA" min="1" value="<%= config.MAX_MENSAJES_FRANJA %>">
+                <div class="ayuda">Franjas: 6-9, 9-12, 12-15, 15-18, 18-21, 21-6</div>
+            </div>
+        </div>
+
         <button type="submit" class="btn-guardar" id="btnGuardar">💾 Guardar configuración</button>
     </form>
-
-    <div class="resumen" id="resumen">
-        <strong>📋 Resumen actual:</strong><br>
-        Envía mensajes de <strong><%= config.HORA_INICIO %>:00</strong> a <strong><%= config.HORA_FIN %>:00</strong>,
-        máximo <strong><%= config.MAX_MENSAJES_HORA %></strong> mensajes por hora y
-        <strong><%= config.MAX_MENSAJES_DIA %></strong> por día,
-        con pausas de entre <strong><%= Math.round(config.PAUSA_BASE/1000) %>s</strong> y
-        <strong><%= Math.round(config.PAUSA_MAX/1000) %>s</strong> entre cada mensaje.
-    </div>
 
     <div class="nav">
         <a href="/">← Inicio</a>
@@ -156,28 +262,8 @@ function aplicarPreset(nombre) {
         if (el) el.value = preset[key];
     });
     document.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('activo'); });
-    event.target.classList.add('activo');
-    actualizarResumen();
+    if (event && event.target) event.target.classList.add('activo');
 }
-
-function actualizarResumen() {
-    var hi = document.getElementById('HORA_INICIO').value;
-    var hf = document.getElementById('HORA_FIN').value;
-    var mh = document.getElementById('MAX_MENSAJES_HORA').value;
-    var md = document.getElementById('MAX_MENSAJES_DIA').value;
-    var pb = document.getElementById('PAUSA_BASE_SEG').value;
-    var pm = document.getElementById('PAUSA_MAX_SEG').value;
-
-    document.getElementById('resumen').innerHTML =
-        '<strong>📋 Resumen actual:</strong><br>' +
-        'Envía mensajes de <strong>' + hi + ':00</strong> a <strong>' + hf + ':00</strong>, ' +
-        'máximo <strong>' + mh + '</strong> mensajes por hora y <strong>' + md + '</strong> por día, ' +
-        'con pausas de entre <strong>' + pb + 's</strong> y <strong>' + pm + 's</strong> entre cada mensaje.';
-}
-
-['HORA_INICIO','HORA_FIN','MAX_MENSAJES_HORA','MAX_MENSAJES_DIA','PAUSA_BASE_SEG','PAUSA_MAX_SEG'].forEach(function(id) {
-    document.getElementById(id).addEventListener('input', actualizarResumen);
-});
 
 document.getElementById('formConfig').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -191,7 +277,34 @@ document.getElementById('formConfig').addEventListener('submit', function(e) {
         MAX_MENSAJES_HORA: document.getElementById('MAX_MENSAJES_HORA').value,
         MAX_MENSAJES_DIA: document.getElementById('MAX_MENSAJES_DIA').value,
         PAUSA_BASE: parseInt(document.getElementById('PAUSA_BASE_SEG').value) * 1000,
-        PAUSA_MAX: parseInt(document.getElementById('PAUSA_MAX_SEG').value) * 1000
+        PAUSA_MAX: parseInt(document.getElementById('PAUSA_MAX_SEG').value) * 1000,
+
+        // NUEVOS
+        PAUSA_LARGA_ACTIVADA: document.getElementById('PAUSA_LARGA_ACTIVADA').checked,
+        PAUSA_LARGA_CADA: document.getElementById('PAUSA_LARGA_CADA').value,
+        PAUSA_LARGA_MIN: parseInt(document.getElementById('PAUSA_LARGA_MIN_MIN').value) * 60000,
+        PAUSA_LARGA_MAX: parseInt(document.getElementById('PAUSA_LARGA_MAX_MIN').value) * 60000,
+
+        LIMITE_SEMANAL_ACTIVADO: document.getElementById('LIMITE_SEMANAL_ACTIVADO').checked,
+        MAX_MENSAJES_SEMANA: document.getElementById('MAX_MENSAJES_SEMANA').value,
+
+        EVITAR_MENSAJE_REPETIDO: document.getElementById('EVITAR_MENSAJE_REPETIDO').checked,
+        ROTACION_MENSAJES: document.getElementById('ROTACION_MENSAJES').checked,
+        VARIACION_LONGITUD: document.getElementById('VARIACION_LONGITUD').checked,
+
+        NO_REENVIAR_RESPONDIDOS: document.getElementById('NO_REENVIAR_RESPONDIDOS').checked,
+        COOLDOWN_TRAS_RESPUESTA_ACTIVADO: document.getElementById('COOLDOWN_TRAS_RESPUESTA_ACTIVADO').checked,
+        COOLDOWN_TRAS_RESPUESTA: parseInt(document.getElementById('COOLDOWN_TRAS_RESPUESTA_MIN').value) * 60000,
+
+        PAUSA_ALMUERZO_ACTIVADA: document.getElementById('PAUSA_ALMUERZO_ACTIVADA').checked,
+        ALMUERZO_INICIO: document.getElementById('ALMUERZO_INICIO').value,
+        ALMUERZO_FIN: document.getElementById('ALMUERZO_FIN').value,
+
+        MAX_ERRORES_CONSECUTIVOS: document.getElementById('MAX_ERRORES_CONSECUTIVOS').value,
+        PAUSA_TRAS_ERRORES: parseInt(document.getElementById('PAUSA_TRAS_ERRORES_MIN').value) * 60000,
+
+        LIMITE_FRANJA_ACTIVADO: document.getElementById('LIMITE_FRANJA_ACTIVADO').checked,
+        MAX_MENSAJES_FRANJA: document.getElementById('MAX_MENSAJES_FRANJA').value,
     };
 
     fetch('/config-antibaneo', {
@@ -214,6 +327,7 @@ document.getElementById('formConfig').addEventListener('submit', function(e) {
         }
         btn.disabled = false;
         btn.textContent = '💾 Guardar configuración';
+        window.scrollTo(0, 0);
     })
     .catch(function(e) {
         document.getElementById('alerta-err').textContent = '❌ ' + e.message;
