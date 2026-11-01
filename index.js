@@ -64,6 +64,9 @@ app.use(session({
 scheduler.init(io);
 setupSockets(io);
 
+// Inyectar io al session-manager de Baileys
+sessionManager.setIO(io);
+
 if (iniciarLimpiezaAutomatica) iniciarLimpiezaAutomatica();
 
 app.use('/', authRoutes);
@@ -75,15 +78,15 @@ app.use('/', viewsRoutes);
 
 (async () => {
     try {
-        console.log('🔄 Restaurando instancias persistentes...');
-        await sessionManager.restaurarTodas(io);
-        console.log('✅ Instancias restauradas');
+        console.log('🔄 Restaurando sesiones Baileys...');
+        await sessionManager.restoreAllSessions();
+        console.log('✅ Sesiones restauradas');
         setTimeout(() => {
             try { scheduler.restaurarCampañas(); }
             catch (err) { console.error('❌ Error restaurando campañas:', err.message); }
         }, 10000);
     } catch (err) {
-        console.error('❌ Error restaurando instancias:', err.message);
+        console.error('❌ Error restaurando sesiones:', err.message);
     }
 })();
 
@@ -118,8 +121,11 @@ server.on('error', err => {
 async function shutdown() {
     console.log('\n🛑 Cerrando MdI MultiWA...');
     try { await scheduler.shutdown(); } catch (err) { console.error('❌ Error Scheduler:', err.message); }
-    try { if (typeof sessionManager.shutdown === 'function') await sessionManager.shutdown(); }
-    catch (err) { console.error('❌ Error Session Manager:', err.message); }
+    try { 
+        if (typeof sessionManager.disconnectAll === 'function') {
+            await sessionManager.disconnectAll();
+        }
+    } catch (err) { console.error('❌ Error Session Manager:', err.message); }
     try { io.close(); } catch (err) {}
     try {
         server.close(() => { console.log('✅ Servidor detenido'); process.exit(0); });

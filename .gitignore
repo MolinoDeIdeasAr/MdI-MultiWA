@@ -75,6 +75,9 @@ uploads/*.png
 uploads/*.jpeg
 uploads/*.gif
 
+# Sesiones de Baileys (credenciales WhatsApp)
+baileys_sessions/
+
 # Archivos temporales
 estructura-proyecto.txt
 arbol-proyecto.txt

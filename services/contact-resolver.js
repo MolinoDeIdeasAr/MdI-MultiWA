@@ -1,163 +1,79 @@
 'use strict';
 
-const {
-    normalizarNumero
-} = require('../utils/phone-utils');
-
-// v1.1.0 — ver CHANGELOG en contact-resolver.js (soporte @lid)
-
-// v1.1.0
-//
-// CHANGELOG v1.1.0:
-//  • FIX CRÍTICO: solo se resolvía el contacto cuando WhatsApp
-//    mandaba el chat en formato "@c.us" (número real). Pero
-//    WhatsApp ahora usa "@lid" (linked ID) para bastantes chats
-//    — un identificador opaco que no es el número real, por
-//    privacidad. Con "@lid" el código caía directo a
-//    "Desconocido" con ese ID como número, sin siquiera intentar
-//    matchear contra los contactos cargados. Ahora, cuando el
-//    chat viene en "@lid", se le pide a WhatsApp que resuelva el
-//    contacto real (msg.getContact() — mismo mecanismo que usa
-//    WhatsApp Web para mostrar nombre/número reales).
-//  • La función ahora es async y recibe "msg" en vez de solo
-//    "rawFrom" (necesita msg.getContact() para el caso @lid).
-
 /**
- * Busca un contacto dentro de la campaña activa.
+ * MdI MultiWA
+ * services/contact-resolver.js
+ * v2.1.0 - Blindado contra celdas vacías o undefined en la planilla de Google Sheets
  */
 
-async function resolverContacto(msg, contactos = []) {
-
-    const rawFrom = msg.from;
-
-    //------------------------------------------------------
-    // Buscar por chatId
-    //------------------------------------------------------
-
-    const porChatId = contactos.find(c =>
-        c.chatIdEnviado === rawFrom
-    );
-
-    if (porChatId) {
-        return porChatId;
-    }
-
-    //------------------------------------------------------
-    // Buscar por número (WhatsApp expone el número real)
-    //------------------------------------------------------
-
-    if (rawFrom.includes('@c.us')) {
-
-        const numero = normalizarNumero(
-            rawFrom.replace('@c.us', '')
-        );
-
-        const encontrado = contactos.find(c =>
-            normalizarNumero(
-                c.NUMERO ||
-                c.numero ||
-                ''
-            ) === numero
-        );
-
-        if (encontrado) {
-            return encontrado;
-        }
-
-    }
-
-    //------------------------------------------------------
-    // WhatsApp oculta el número real detrás de un "lid" —
-    // pedirle a WhatsApp que resuelva el contacto real
-    //------------------------------------------------------
-
-    if (rawFrom.includes('@lid')) {
-
-        try {
-
-            const contactoWA = await msg.getContact();
-
-            const numeroReal = normalizarNumero(
-                contactoWA.number || ''
-            );
-
-            if (numeroReal) {
-
-                const encontrado = contactos.find(c =>
-                    normalizarNumero(
-                        c.NUMERO ||
-                        c.numero ||
-                        ''
-                    ) === numeroReal
-                );
-
-                if (encontrado) {
-                    return encontrado;
-                }
-
-            }
-
-            // No está en la lista cargada, pero WhatsApp sí nos
-            // dio nombre/número reales — mejor eso que "Desconocido"
-            const nombreReal =
-                contactoWA.pushname ||
-                contactoWA.name ||
-                'Desconocido';
-
-            return {
-
-                NOMBRE: nombreReal,
-
-                NUMERO: contactoWA.number || rawFrom.replace(/@.*$/, ''),
-
-                nombre: nombreReal,
-
-                numero: contactoWA.number || rawFrom.replace(/@.*$/, ''),
-
-                _esDesconocido: !contactoWA.number
-
-            };
-
-        }
-
-        catch (err) {
-
-            console.warn(
-
-                '⚠ No se pudo resolver contacto @lid:',
-
-                err.message
-
-            );
-
-            // sigue al fallback de abajo
-
-        }
-
-    }
-
-    //------------------------------------------------------
-    // Contacto desconocido
-    //------------------------------------------------------
-
-    return {
-
-        NOMBRE: 'Desconocido',
-
-        NUMERO: rawFrom.replace(/@.*$/, ''),
-
-        nombre: 'Desconocido',
-
-        numero: rawFrom.replace(/@.*$/, ''),
-
-        _esDesconocido: true
-
-    };
-
+function normalizarNumero(numero) {
+    if (!numero) return '';
+    return String(numero).replace(/[^0-9]/g, '');
 }
 
-module.exports = {
+async function resolverContacto(msg, contactosCargados) {
+    try {
+        if (!msg || !msg.key || !msg.key.remoteJid) {
+            return null;
+        }
 
-    resolverContacto
+        const rawFrom = msg.key.remoteJid;
+        // En mensajes de grupo, el remitente real está en participant. En chats directos, en remoteJid.
+        const remitente = msg.key.participant || rawFrom;
+        
+        // Extraer solo dígitos (ej: "5493513043371@s.whatsapp.net" -> "5493513043371")
+        const numeroExtraido = remitente.split('@')[0].replace(/[^0-9]/g, '');
 
-};
+        if (!contactosCargados || !Array.isArray(contactosCargados)) {
+            return {
+                numero: numeroExtraido,
+                NOMBRE: 'Cliente',
+                RUBRO: 'Sin rubro',
+                encontrado: false
+            };
+        }
+
+        // Buscar en la planilla de forma BLINDADA (evita el error de undefined.includes)
+        const contactoEncontrado = contactosCargados.find(c => {
+            if (!c) return false;
+            
+            // Obtener el número de la planilla probando varios nombres de columna comunes
+            const numPlanillaRaw = c.NUMERO || c.numero || c.Numero || c.Telefono || c.telefono || c.WhatsApp || c.whatsapp;
+            const numeroPlanilla = normalizarNumero(numPlanillaRaw);
+            
+            // Si la fila no tiene número, la ignoramos para evitar que el sistema colapse
+            if (!numeroPlanilla) return false;
+
+            // Lógica de coincidencia flexible:
+            // 1. Coincidencia exacta
+            // 2. El número de la planilla está al final del extraído (ej: planilla="3513043371", extraido="5493513043371")
+            // 3. El número extraído está al final del de la planilla (caso inverso)
+            return numeroPlanilla === numeroExtraido || 
+                   numeroExtraido.endsWith(numeroPlanilla) || 
+                   numeroPlanilla.endsWith(numeroExtraido);
+        });
+
+        if (contactoEncontrado) {
+            return {
+                numero: normalizarNumero(contactoEncontrado.NUMERO || contactoEncontrado.numero || contactoEncontrado.Telefono),
+                NOMBRE: contactoEncontrado.NOMBRE || contactoEncontrado.nombre || contactoEncontrado.Nombre || 'Cliente',
+                RUBRO: contactoEncontrado.RUBRO || contactoEncontrado.rubro || contactoEncontrado.Rubro || 'Sin rubro',
+                encontrado: true
+            };
+        }
+
+        // Fallback si no se encuentra en la planilla (pero el sistema sigue funcionando)
+        return {
+            numero: numeroExtraido,
+            NOMBRE: 'Cliente Nuevo',
+            RUBRO: 'Sin rubro',
+            encontrado: false
+        };
+
+    } catch (error) {
+        console.error('❌ Error interno en resolverContacto:', error.message);
+        return null;
+    }
+}
+
+module.exports = { resolverContacto, normalizarNumero };

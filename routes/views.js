@@ -1,454 +1,195 @@
 const express = require('express');
 const router = express.Router();
 const sessionManager = require('../services/session-manager');
-const { cargarEstado } = require('../state/estado');
+const { cargarEstado, guardarEstado } = require('../state/estado');
 const { isAuthenticated } = require('./auth');
-
-// v1.1.0
-//
-// CHANGELOG v1.1.0:
-//  • FIX CRÍTICO: GET / y POST /seleccionar-instancia ahora arrancan
-//    (sessionManager.iniciarSiNecesario) una instancia "pendiente"
-//    (persistida pero no corriendo en memoria) en vez de dejarla
-//    dormida. Antes esto hacía que el usuario pareciera "sin
-//    instancias" y el flujo terminaba creando una instancia nueva
-//    en vez de reusar la existente ya vinculada — requiere
-//    session-manager.js v3.4.0+ (getUserInstances combinado +
-//    iniciarSiNecesario).
 
 router.use(isAuthenticated);
 
-// ─────────────────────────────────────────────
-//  GET / — Panel principal
-// ─────────────────────────────────────────────
+function mapearInstancias(instanciasRaw) {
+    return instanciasRaw.map(inst => ({ ...inst, id: inst.instanceId, listo: inst.ready }));
+}
+
+function obtenerEstadoCompleto(activeId) {
+    if (!activeId) return null;
+    const estadoDisco = cargarEstado(activeId) || {};
+    const infoInst = sessionManager.getEstado(activeId);
+    return {
+        ...estadoDisco,
+        listo: infoInst ? infoInst.ready : false,
+        numeroWhatsApp: infoInst ? infoInst.phoneNumber : (estadoDisco.numeroWhatsApp || '')
+    };
+}
+
 router.get('/', async (req, res) => {
     try {
         const userId = req.session.userId;
-        const io = req.app.get('io');
-        const instancias = sessionManager.getUserInstances(userId);
+        const instanciasRaw = sessionManager.getUserInstances(userId);
+        const instancias = mapearInstancias(instanciasRaw);
         let activeId = sessionManager.getActiveInstanceId(userId);
 
-        // FIX: si no hay instancia activa pero sí hay instancias, auto-seleccionar la primera conectada
         if (!activeId && instancias.length > 0) {
             const conectada = instancias.find(i => i.listo) || instancias[0];
             sessionManager.setActiveInstance(userId, conectada.id);
             activeId = conectada.id;
         }
 
-        // FIX: si la instancia activa quedó "pendiente" (persistida pero
-        // no corriendo en memoria, ej: afuera del tope de auto-restauración),
-        // arrancarla en vez de dejarla dormida — antes esto hacía que la
-        // pantalla pareciera "sin instancias" y terminara creando una nueva.
-        const activa = instancias.find(i => i.id === activeId);
-        if (activa && activa.iniciada === false) {
-            sessionManager.iniciarSiNecesario(userId, io, activeId).catch(e => {
-                console.error('Error iniciando instancia pendiente:', e.message);
-            });
-        }
-
-        let estado = sessionManager.getEstado(userId);
-
-        // Si getEstado devuelve null, intentar cargar desde disco
-        if (!estado && activeId) {
-            estado = cargarEstado(activeId);
-            if (estado) {
-                const s = sessionManager.getUserSession(userId);
-                if (s) {
-                    const inst = s.instances.get(activeId);
-                    if (inst) {
-                        inst.estado = estado;
-                        if (inst.numero) estado.numeroWhatsApp = inst.numero;
-                        estado.listo = inst.listo;
-                    }
-                }
-            }
-        }
-
-        res.render('index', {
-            estado: estado || null,
-            instancias,
-            activeId: activeId || null,
-            sinInstancias: instancias.length === 0,
-            userId: userId  // FIX: pasar userId para el socket del cliente
-        });
+        const estado = obtenerEstadoCompleto(activeId);
+        res.render('index', { estado: estado || null, instancias, activeId: activeId || null, sinInstancias: instancias.length === 0, userId });
     } catch (error) {
         console.error('Error en GET /:', error);
-        res.status(500).send('Error interno del servidor');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  GET /qr
-// ─────────────────────────────────────────────
-router.get('/qr', (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const activeId = sessionManager.getActiveInstanceId(userId);
-        const instancias = sessionManager.getUserInstances(userId);
-
-        // FIX: solo redirigir si la instancia activa ya está conectada
-        // Y no hay ninguna instancia pendiente de escaneo (listo=false)
-        const hayPendiente = instancias.some(i => !i.listo);
-        const activaConectada = instancias.find(i => i.id === activeId && i.listo);
-
-        if (activaConectada && !hayPendiente) {
-            return res.redirect('/');
-        }
-
-        res.render('qr', {
-            listo: false,
-            userId: userId
-        });
-    } catch (error) {
-        console.error('Error en GET /qr:', error);
-        res.status(500).send('Error interno del servidor');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  GET /monitor
-// ─────────────────────────────────────────────
-router.get('/monitor', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const instancias = sessionManager.getUserInstances(userId);
-
-        // FIX: el selector de instancia recarga como
-        // /monitor?instanceId=... (y el polling de
-        // /api/monitor/progreso ya respeta ese query param), pero
-        // esta ruta lo ignoraba por completo y siempre usaba la
-        // instancia "activa global" de la sesión — por eso el
-        // título (con el rubro) no correspondía a la instancia
-        // que en realidad estabas mirando. Si viene por query Y
-        // es una instancia del usuario logueado, se usa esa; si
-        // no, se cae a la activa de siempre (nunca se acepta un
-        // instanceId de otro usuario).
-        const idsPropios =
-            new Set(instancias.map(i => i.id));
-
-        const activeId =
-            (
-                req.query.instanceId &&
-                idsPropios.has(req.query.instanceId)
-            )
-                ? req.query.instanceId
-                : sessionManager.getActiveInstanceId(userId);
-
-        let estado =
-            activeId
-
-                ? sessionManager.getUserSession(userId)
-                      ?.instances.get(activeId)
-                      ?.estado
-
-                : null;
-
-        if (!estado && activeId) {
-            estado = cargarEstado(activeId);
-            if (estado) {
-                const s = sessionManager.getUserSession(userId);
-                if (s) {
-                    const inst = s.instances.get(activeId);
-                    if (inst) {
-                        inst.estado = estado;
-                        if (inst.numero) estado.numeroWhatsApp = inst.numero;
-                        estado.listo = inst.listo;
-                    }
-                }
-            }
-        }
-
-        // Asegurar que el número y el listo estén siempre sincronizados
-        if (estado && activeId) {
-            const s = sessionManager.getUserSession(userId);
-            if (s) {
-                const inst = s.instances.get(activeId);
-                if (inst) {
-                    if (inst.numero) estado.numeroWhatsApp = inst.numero;
-                    estado.listo = inst.listo;
-                }
-            }
-        }
-
-        res.render('monitor', {
-            estado: estado || null,
-            instancias,
-            // FIX: pasar como activeId (el EJS usa inst.id === activeId)
-            activeId: activeId || null
-        });
-    } catch (error) {
-        console.error('Error en GET /monitor:', error);
-        res.status(500).send('Error interno del servidor');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  GET /cargar
-// ─────────────────────────────────────────────
-router.get('/cargar', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const estado = sessionManager.getEstado(userId);
-        res.render('cargar', { estado: estado || null });
-    } catch (error) {
-        console.error('Error en GET /cargar:', error);
-        res.status(500).send('Error interno del servidor');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  POST /seleccionar-instancia
-// ─────────────────────────────────────────────
-router.post('/seleccionar-instancia', (req, res) => {
-    try {
-        const { instanceId } = req.body;
-        const userId = req.session.userId;
-        const io = req.app.get('io');
-        if (!instanceId) return res.redirect('/');
-        sessionManager.setActiveInstance(userId, instanceId);
-
-        // FIX: si la instancia elegida no está corriendo en memoria
-        // (quedó pendiente por el tope de auto-restauración), arrancarla
-        // en vez de dejarla dormida.
-        sessionManager.iniciarSiNecesario(userId, io, instanceId).catch(e => {
-            console.error('Error iniciando instancia pendiente:', e.message);
-        });
-
-        // FIX: redirigir a la página desde donde vino si está disponible
-        const referer = req.headers.referer || '/';
-        res.redirect(referer.includes('monitor') ? '/monitor' : '/');
-    } catch (error) {
-        console.error('Error en POST /seleccionar-instancia:', error);
-        res.status(500).send('Error al seleccionar instancia');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  POST /nueva-instancia
-// ─────────────────────────────────────────────
-router.post('/nueva-instancia', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const io = req.app.get('io');
-        const uniqueId = `inst_${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-        // FIX: iniciar en background y setear como activa para que /qr muestre su QR
-        sessionManager.startSession(userId, io, uniqueId).catch(e => {
-            console.error('Error iniciando sesión:', e.message);
-        });
-
-        // Pequeña espera para que la instancia quede registrada en memoria
-        await new Promise(r => setTimeout(r, 300));
-        sessionManager.setActiveInstance(userId, uniqueId);
-
-        res.redirect('/qr');
-    } catch (error) {
-        console.error('Error en POST /nueva-instancia:', error);
-        res.status(500).send('Error al crear instancia');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  GET /conversaciones
-// ─────────────────────────────────────────────
-router.get('/conversaciones', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        let conversaciones = [];
-
-        // FIX: antes solo mostraba las conversaciones de la
-        // instancia ACTIVA — si te respondían en otra cuenta
-        // (de las hasta 6 que puede haber conectadas), la
-        // respuesta se guardaba bien pero nunca se veía en esta
-        // pantalla hasta cambiar de instancia activa a mano.
-        // Ahora se juntan las de TODAS las instancias del
-        // usuario (cada conversación ya trae "origenNumero"
-        // para poder distinguir de qué cuenta vino).
-        const instancias = sessionManager.getUserInstances(userId);
-
-        for (const inst of instancias) {
-            const convsInstancia =
-                inst.estado?.conversaciones ||
-                cargarEstado(inst.id)?.conversaciones ||
-                [];
-
-            conversaciones = conversaciones.concat(convsInstancia);
-        }
-
-        // Más recientes primero
-        conversaciones.sort((a, b) => {
-            const fa = new Date(a.fecha).getTime() || 0;
-            const fb = new Date(b.fecha).getTime() || 0;
-            return fb - fa;
-        });
-
-        res.render('conversaciones', { conversaciones });
-    } catch (error) {
-        console.error('Error en GET /conversaciones:', error);
-        res.status(500).send('Error interno del servidor');
-    }
-});
-
-// ─────────────────────────────────────────────
-//  POST /borrar-todas-conversaciones
-// ─────────────────────────────────────────────
-router.post('/borrar-todas-conversaciones', async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const s = sessionManager.getUserSession(userId);
-        if (s) {
-            for (const [instanceId, inst] of s.instances) {
-                if (inst.estado) {
-                    inst.estado.conversaciones = [];
-                    const { guardarEstado } = require('../state/estado');
-                    guardarEstado(inst.estado, instanceId);
-                }
-            }
-        }
-        res.json({ success: true });
-    } catch (error) {
-        console.error('Error borrando conversaciones:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-
-// ─────────────────────────────────────────────
-//  GET /bajas
-// ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-//  GET /config-antibaneo
-// ─────────────────────────────────────────────
-router.get('/config-antibaneo', (req, res) => {
-    try {
-        const { cargarConfig } = require('../config/anti-baneo');
-        const config = cargarConfig();
-        res.render('config-antibaneo', { config, guardado: false });
-    } catch (error) {
-        console.error('Error en GET /config-antibaneo:', error);
         res.status(500).send('Error interno');
     }
 });
 
-// ─────────────────────────────────────────────
-//  POST /config-antibaneo
-// ─────────────────────────────────────────────
+router.get('/qr', (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const activeId = sessionManager.getActiveInstanceId(userId);
+        const instanciasRaw = sessionManager.getUserInstances(userId);
+        const instancias = mapearInstancias(instanciasRaw);
+        const hayPendiente = instancias.some(i => !i.listo);
+        const activaConectada = instancias.find(i => i.id === activeId && i.listo);
+        if (activaConectada && !hayPendiente) return res.redirect('/');
+        res.render('qr', { listo: false, userId, activeId });
+    } catch (error) {
+        res.status(500).send('Error interno');
+    }
+});
+
+router.get('/monitor', async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const instanciasRaw = sessionManager.getUserInstances(userId);
+        const instancias = mapearInstancias(instanciasRaw);
+        const idsPropios = new Set(instancias.map(i => i.id));
+        const activeId = (req.query.instanceId && idsPropios.has(req.query.instanceId)) ? req.query.instanceId : sessionManager.getActiveInstanceId(userId);
+        res.render('monitor', { estado: obtenerEstadoCompleto(activeId) || null, instancias, activeId: activeId || null });
+    } catch (error) {
+        res.status(500).send('Error interno');
+    }
+});
+
+router.get('/cargar', async (req, res) => {
+    try {
+        const activeId = sessionManager.getActiveInstanceId(req.session.userId);
+        res.render('cargar', { estado: obtenerEstadoCompleto(activeId) || null, activeId });
+    } catch (error) {
+        res.status(500).send('Error interno');
+    }
+});
+
+router.post('/seleccionar-instancia', (req, res) => {
+    try {
+        const { instanceId } = req.body;
+        if (!instanceId) return res.redirect('/');
+        sessionManager.setActiveInstance(req.session.userId, instanceId);
+        res.redirect((req.headers.referer || '/').includes('monitor') ? '/monitor' : '/');
+    } catch (error) {
+        res.status(500).send('Error');
+    }
+});
+
+router.post('/nueva-instancia', async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const uniqueId = `inst_${userId}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        sessionManager.startSession(uniqueId, userId).catch(e => console.error('Error:', e.message));
+        await new Promise(r => setTimeout(r, 500));
+        sessionManager.setActiveInstance(userId, uniqueId);
+        res.redirect('/qr');
+    } catch (error) {
+        res.status(500).send('Error');
+    }
+});
+
+router.get('/conversaciones', async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        let conversaciones = [];
+        for (const inst of sessionManager.getUserInstances(userId)) {
+            const convs = cargarEstado(inst.instanceId)?.conversaciones || [];
+            conversaciones = conversaciones.concat(convs);
+        }
+        conversaciones.sort((a, b) => (new Date(b.fecha).getTime() || 0) - (new Date(a.fecha).getTime() || 0));
+        res.render('conversaciones', { conversaciones });
+    } catch (error) {
+        res.status(500).send('Error');
+    }
+});
+
+router.post('/borrar-todas-conversaciones', async (req, res) => {
+    try {
+        for (const inst of sessionManager.getUserInstances(req.session.userId)) {
+            const estado = cargarEstado(inst.instanceId);
+            if (estado) {
+                estado.conversaciones = [];
+                guardarEstado(estado, inst.instanceId);
+            }
+        }
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/config-antibaneo', (req, res) => {
+    try {
+        res.render('config-antibaneo', { config: require('../config/anti-baneo').cargarConfig(), guardado: false });
+    } catch (error) {
+        res.status(500).send('Error');
+    }
+});
+
 router.post('/config-antibaneo', (req, res) => {
     try {
-        const { guardarConfig, cargarConfig } = require('../config/anti-baneo');
-        const nuevaConfig = guardarConfig(req.body);
-        if (!nuevaConfig) {
-            return res.status(500).json({ error: 'No se pudo guardar la configuración' });
-        }
+        const nuevaConfig = require('../config/anti-baneo').guardarConfig(req.body);
+        if (!nuevaConfig) return res.status(500).json({ error: 'No se pudo guardar' });
         res.json({ success: true, config: nuevaConfig });
     } catch (error) {
-        console.error('Error en POST /config-antibaneo:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 router.get('/bajas', (req, res) => {
     try {
-        const { obtenerBajas } = require('../services/bajas');
-        const bajas = obtenerBajas();
-        res.render('bajas', { bajas });
+        res.render('bajas', { bajas: require('../services/bajas').obtenerBajas() });
     } catch (error) {
-        console.error('Error en GET /bajas:', error);
-        res.status(500).send('Error interno');
+        res.status(500).send('Error');
     }
 });
 
 router.post('/desconectar-instancia', async (req, res) => {
     try {
-        const { instanceId } = req.body;
-        const userId = req.session.userId;
-        if (!instanceId) return res.redirect('/');
-        await sessionManager.removeInstance(userId, instanceId);
+        if (!req.body.instanceId) return res.redirect('/');
+        await sessionManager.disconnectSession(req.body.instanceId);
         res.redirect('/');
     } catch (error) {
-        console.error('Error en POST /desconectar-instancia:', error);
-        res.status(500).send('Error al eliminar instancia');
+        res.status(500).send('Error');
     }
 });
 
-// ─────────────────────────────────────────────
-//  POST /forzar-desconexion
-//  Limpieza forzada sin depender del cliente WA
-// ─────────────────────────────────────────────
 router.post('/forzar-desconexion', async (req, res) => {
     try {
         const { instanceId } = req.body;
         const userId = req.session.userId;
         if (!instanceId) return res.json({ error: 'Sin instanceId' });
 
-        const fs = require('fs');
-        const path = require('path');
-        const SESSIONS_DIR = path.join(__dirname, '..', 'sessions');
+        await sessionManager.disconnectSession(instanceId);
+        const sessionDir = path.join(__dirname, '..', 'baileys_sessions', instanceId);
+        if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
+
         const INSTANCIAS_FILE = path.join(__dirname, '..', 'data', 'instancias.json');
-
-        console.log(`🔧 Forzando desconexión de ${instanceId}...`);
-
-        // 1. Intentar destroy del cliente si existe (ignorar errores)
-        try {
-            const client = sessionManager.getClient(instanceId);
-            if (client) {
-                await Promise.race([
-                    client.destroy(),
-                    new Promise(r => setTimeout(r, 3000)) // max 3s
-                ]);
-            }
-        } catch (e) {
-            console.warn(`⚠️ Error en destroy (ignorado): ${e.message}`);
-        }
-
-        // 2. Eliminar de memoria
-        const s = sessionManager.getUserSession(userId);
-        if (s) {
-            s.instances.delete(instanceId);
-            if (s.activeId === instanceId) {
-                const restantes = [...s.instances.keys()];
-                s.activeId = restantes.length > 0 ? restantes[0] : null;
-            }
-        }
-
-        // 3. Borrar carpeta de sesión de Puppeteer
-        const sessionDir = path.join(SESSIONS_DIR, `session-${instanceId}`);
-        if (fs.existsSync(sessionDir)) {
-            try {
-                fs.rmSync(sessionDir, { recursive: true, force: true });
-                console.log(`🗑️ Carpeta de sesión eliminada: ${sessionDir}`);
-            } catch (e) {
-                console.warn(`⚠️ No se pudo borrar carpeta (puede estar bloqueada): ${e.message}`);
-                // Intentar borrar archivo por archivo
-                try {
-                    const archivos = fs.readdirSync(sessionDir);
-                    for (const a of archivos) {
-                        try { fs.unlinkSync(path.join(sessionDir, a)); } catch (_) {}
-                    }
-                    fs.rmdirSync(sessionDir);
-                } catch (_) {}
-            }
-        }
-
-        // 4. Eliminar del instancias.json
         if (fs.existsSync(INSTANCIAS_FILE)) {
-            try {
-                const data = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
-                if (data[userId]) {
-                    data[userId] = data[userId].filter(i => i.id !== instanceId);
-                    if (data[userId].length === 0) delete data[userId];
-                    fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(data, null, 2));
-                }
-            } catch (e) {
-                console.warn(`⚠️ Error limpiando instancias.json: ${e.message}`);
+            const data = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
+            if (data[userId]) {
+                data[userId] = data[userId].filter(i => i.id !== instanceId && i.instanceId !== instanceId);
+                if (data[userId].length === 0) delete data[userId];
+                fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(data, null, 2));
             }
         }
-
-        console.log(`✅ Desconexión forzada completada: ${instanceId}`);
         res.json({ success: true });
-
     } catch (error) {
-        console.error('Error en forzar-desconexion:', error);
         res.json({ success: false, error: error.message });
     }
 });
