@@ -119,7 +119,7 @@
         const fd = new FormData();
         fd.append('excel', archivo);
         try {
-            const res = await fetch('/cargar', { method: 'POST', body: fd });
+            const res = await fetch('/api/carga/cargar', { method: 'POST', body: fd });
             const d = await res.json();
             if (!res.ok) throw new Error(d.error);
             alert(`✅ ${d.total} contactos`);

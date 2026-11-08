@@ -9,45 +9,71 @@ const fs = require('fs');
 const path = require('path');
 
 const SESSIONS_DIR = path.join(__dirname, '..', 'sessions');
+const BAILEYS_SESSIONS_DIR = path.join(__dirname, '..', 'baileys_sessions');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const INSTANCIAS_FILE = path.join(DATA_DIR, 'instancias.json');
 const MAX_AGE_DAYS = 30;
 
 //----------------------------------------------------------
-// LIMPIAR SESIONES VIEJAS (carpeta sessions/)
+// LIMPIAR SESIONES VIEJAS (carpetas sessions/ y baileys_sessions/)
 //----------------------------------------------------------
 function limpiarSesionesViejas() {
-    try {
-        if (!fs.existsSync(SESSIONS_DIR)) {
-            return 0;
-        }
+    let borradas = 0;
+    const carpetas = [SESSIONS_DIR, BAILEYS_SESSIONS_DIR];
+    const ahora = Date.now();
+    const maxAge = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
-        const ahora = Date.now();
-        const maxAge = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-        let borradas = 0;
+    for (const dir of carpetas) {
+        try {
+            if (!fs.existsSync(dir)) continue;
+            const sesiones = fs.readdirSync(dir);
+            
+            for (const sesion of sesiones) {
+                const sesionPath = path.join(dir, sesion);
+                try {
+                    if (!fs.existsSync(sesionPath)) continue;
+                    
+                    const stats = fs.statSync(sesionPath);
+                    let ultimaModificacion = stats.mtimeMs;
 
-        const sesiones = fs.readdirSync(SESSIONS_DIR);
+                    // Si es una carpeta (como pasa siempre con Baileys), revisamos el archivo más interno
+                    if (stats.isDirectory()) {
+                        const archivosInternos = fs.readdirSync(sesionPath);
+                        if (archivosInternos.length === 0) {
+                            // Carpeta vacía abandonada, la borramos directo
+                            fs.rmSync(sesionPath, { recursive: true, force: true });
+                            borradas++;
+                            continue;
+                        }
+                        // Buscamos el archivo que realmente se haya modificado al último
+                        for (const archivo of archivosInternos) {
+                            const archivoPath = path.join(sesionPath, archivo);
+                            try {
+                                const fileStats = fs.statSync(archivoPath);
+                                if (fileStats.mtimeMs > ultimaModificacion) {
+                                    ultimaModificacion = fileStats.mtimeMs;
+                                }
+                            } catch (e) {}
+                        }
+                    }
 
-        for (const sesion of sesiones) {
-            const sesionPath = path.join(SESSIONS_DIR, sesion);
-            try {
-                const stats = fs.statSync(sesionPath);
-                if (ahora - stats.mtimeMs > maxAge) {
-                    fs.rmSync(sesionPath, { recursive: true, force: true });
-                    borradas++;
-                    console.log(`🗑️ Sesión vieja eliminada: ${sesion}`);
+                    // Forzar borrado si supera los días límite
+                    if (ahora - ultimaModificacion > maxAge) {
+                        fs.rmSync(sesionPath, { recursive: true, force: true });
+                        borradas++;
+                        console.log(`🗑️ Sesión vieja eliminada de raíz: ${sesion}`);
+                    }
+                } catch (err) {
+                    console.warn(`⚠️ No se pudo eliminar sesión ${sesion}: ${err.message}`);
                 }
-            } catch (err) {
-                console.warn(`⚠️ No se pudo eliminar sesión ${sesion}: ${err.message}`);
             }
+        } catch (err) {
+            console.error(`❌ Error limpiando sesiones en ${dir}:`, err.message);
         }
-
-        return borradas;
-    } catch (err) {
-        console.error('❌ Error limpiando sesiones:', err.message);
-        return 0;
     }
+    return borradas;
 }
+
 
 //----------------------------------------------------------
 // LIMPIAR INSTANCIAS VIEJAS (instancias.json)

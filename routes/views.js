@@ -1,7 +1,10 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const sessionManager = require('../services/session-manager');
-const { cargarEstado, guardarEstado } = require('../state/estado');
+const { cargarEstado, guardarEstado, getEstadoInstancia } = require('../state/estado');
+const scheduler = require('../services/campaign-scheduler');
 const { isAuthenticated } = require('./auth');
 
 router.use(isAuthenticated);
@@ -12,7 +15,7 @@ function mapearInstancias(instanciasRaw) {
 
 function obtenerEstadoCompleto(activeId) {
     if (!activeId) return null;
-    const estadoDisco = cargarEstado(activeId) || {};
+    const estadoDisco = getEstadoInstancia(activeId) || cargarEstado(activeId) || {};
     const infoInst = sessionManager.getEstado(activeId);
     return {
         ...estadoDisco,
@@ -108,7 +111,7 @@ router.get('/conversaciones', async (req, res) => {
         const userId = req.session.userId;
         let conversaciones = [];
         for (const inst of sessionManager.getUserInstances(userId)) {
-            const convs = cargarEstado(inst.instanceId)?.conversaciones || [];
+            const convs = getEstadoInstancia(inst.instanceId)?.conversaciones || [];
             conversaciones = conversaciones.concat(convs);
         }
         conversaciones.sort((a, b) => (new Date(b.fecha).getTime() || 0) - (new Date(a.fecha).getTime() || 0));
@@ -121,7 +124,7 @@ router.get('/conversaciones', async (req, res) => {
 router.post('/borrar-todas-conversaciones', async (req, res) => {
     try {
         for (const inst of sessionManager.getUserInstances(req.session.userId)) {
-            const estado = cargarEstado(inst.instanceId);
+            const estado = getEstadoInstancia(inst.instanceId);
             if (estado) {
                 estado.conversaciones = [];
                 guardarEstado(estado, inst.instanceId);
@@ -191,6 +194,35 @@ router.post('/forzar-desconexion', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         res.json({ success: false, error: error.message });
+    }
+});
+
+//----------------------------------------------------------
+// ENDPOINT DE PAUSAR (Corregido y Finalizado)
+//----------------------------------------------------------
+router.post('/pausar', (req, res) => {
+    try {
+        const instanceId = req.body.instanceId || req.query.instanceId || sessionManager.getActiveInstanceId(req.session.userId);
+        if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
+        
+        const estado = getEstadoInstancia(instanceId);
+        if (!estado) return res.status(404).json({ ok: false, error: 'Instancia inexistente' });
+        
+        estado.enviando = false;
+        estado.pausado = true; // Forzamos el estado de pausa
+        
+        // Guardamos el cambio de estado en el disco/memoria
+        guardarEstado(estado, instanceId);
+        
+        // Si tienes un scheduler activo para campañas, lo pausamos también
+        if (scheduler && typeof scheduler.pauseCampaign === 'function') {
+            scheduler.pauseCampaign(instanceId);
+        }
+
+        res.json({ ok: true, message: 'Instancia pausada con éxito', estado });
+    } catch (error) {
+        console.error('Error al pausar instancia:', error);
+        res.status(500).json({ ok: false, error: error.message });
     }
 });
 

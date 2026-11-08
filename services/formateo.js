@@ -75,12 +75,22 @@ function getTiempoEscritura(mensaje) {
     return Math.min(Math.max(ms, 2500), 15000);
 }
 
+function generarDelayHumano(mensaje) {
+    return getTiempoEscritura(mensaje);
+}
+
 async function simularEscrituraHumana(client, chatId, mensaje) {
     const tiempoBase = getTiempoEscritura(mensaje);
     try {
-        // Si es @lid, omitimos la animación para evitar el crash de la librería
-        if (chatId && chatId.includes('@lid')) {
+        if (chatId && String(chatId).includes('@lid')) {
             await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+            return;
+        }
+
+        if (client && typeof client.sendPresenceUpdate === 'function') {
+            try { await client.sendPresenceUpdate('composing', chatId); } catch (_) {}
+            await new Promise(resolve => setTimeout(resolve, tiempoBase));
+            try { await client.sendPresenceUpdate('paused', chatId); } catch (_) {}
             return;
         }
 
@@ -142,5 +152,6 @@ module.exports = {
     procesarSpintax,
     extraerIdGoogleSheets,
     simularEscrituraHumana,
-    getTiempoEscritura
+    getTiempoEscritura,
+    generarDelayHumano
 };

@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { guardarEstado, cargarEstado } = require('../state/estado');
+const { cargarEstado, guardarEstado, getEstadoInstancia } = require('../state/estado');
 const sessionManager = require('../services/session-manager');
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
@@ -18,7 +18,7 @@ router.post('/guardar-mensajes', async (req, res) => {
         const { mensaje1, mensaje2, mensaje3, respuestaInfo, tipoCampana, respuestasInfoPorTipo, linkPreviewActivo } = req.body;
         const mensajes = [mensaje1 || '', mensaje2 || '', mensaje3 || ''].filter(Boolean);
         
-        let estado = cargarEstado(instanceId) || {};
+        let estado = getEstadoInstancia(instanceId) || {};
         estado.mensajesGuardados = mensajes;
         if (respuestaInfo !== undefined) estado.respuestaInfo = respuestaInfo;
         if (tipoCampana !== undefined) estado.tipoCampana = tipoCampana;

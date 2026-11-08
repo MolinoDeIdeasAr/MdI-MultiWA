@@ -1,129 +1,159 @@
 'use strict';
+
 const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+
 const sessionManager = require('../services/session-manager');
-const scheduler = require('../services/campaign-scheduler');
-const { getScheduler, reiniciarScheduler } = require('../state/scheduler-state');
-const { getEstadoInstancia, actualizarEstado, guardarEstadoSeguro, guardarMensajes, guardarImagen, eliminarImagen, resetearContadores } = require('../state/estado');
+const scheduler = require('../services/campaign-scheduler'); // <-- ¡IMPORTADO!
 
+const { 
+    getEstadoInstancia, 
+    guardarMensajes, 
+    guardarImagen, 
+    guardarCampanaPorTipo,
+    obtenerCampanaPorTipo,
+    guardarEstadoSeguro
+} = require('../state/estado');
+
+// Configuración de multer para subir imágenes
 const storage = multer.diskStorage({
-    destination(req, file, cb) { cb(null, path.join(__dirname, '..', 'uploads')); },
-    filename(req, file, cb) { cb(null, `${Date.now()}_${file.originalname.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '')}`); }
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, '..', 'uploads');
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
 });
-const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } });
+const upload = multer({ storage: storage });
 
+// ============================================================
+// 1. GUARDAR MENSAJES Y CONFIGURACIÓN
+// ============================================================
 router.post('/mensajes', async (req, res) => {
     try {
-        const { instanceId, mensajes, respuestaInfo, tipoCampana, respuestasInfoPorTipo, linkPreviewActivo } = req.body;
-        if (!instanceId || !Array.isArray(mensajes)) return res.status(400).json({ ok: false, error: 'Datos inválidos' });
-        const lista = mensajes.map(m => String(m || '').trim()).filter(Boolean);
-        if (lista.length === 0) return res.status(400).json({ ok: false, error: 'Debe ingresar al menos un mensaje' });
-        if (!sessionManager.getClient(instanceId)) return res.status(400).json({ ok: false, error: 'Cliente no conectado' });
-
+        const { instanceId, mensajes, respuestaInfo, linkPreviewActivo, tipoCampana, respuestasInfoPorTipo } = req.body;
+        if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
+        
         const estado = getEstadoInstancia(instanceId);
         if (!estado) return res.status(400).json({ ok: false, error: 'Estado inexistente' });
 
-        if (typeof respuestaInfo === 'string') estado.respuestaInfo = respuestaInfo.trim();
         if (tipoCampana !== undefined) estado.tipoCampana = (tipoCampana || '').trim();
-        if (respuestasInfoPorTipo && typeof respuestasInfoPorTipo === 'object') estado.respuestasInfoPorTipo = respuestasInfoPorTipo;
-        if (linkPreviewActivo !== undefined) estado.linkPreviewActivo = linkPreviewActivo !== false;
+        if (respuestasInfoPorTipo && typeof respuestasInfoPorTipo === 'object') {
+            estado.respuestasInfoPorTipo = respuestasInfoPorTipo;
+        }
+        estado.linkPreviewActivo = linkPreviewActivo !== false;
+        
+        guardarMensajes(instanceId, mensajes);
 
-        guardarMensajes(instanceId, lista);
-        return res.json({ ok: true, total: lista.length });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
+        if (estado.tipoCampana && estado.tipoCampana.trim() !== '') {
+            guardarCampanaPorTipo(instanceId, estado.tipoCampana.trim(), {
+                mensajes: mensajes,
+                linkPreviewActivo: estado.linkPreviewActivo,
+                imagenGuardada: estado.imagenGuardada
+            });
+        }
+
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('❌ Error en /api/envio/mensajes:', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
+// ============================================================
+// 2. CARGAR PLANTILLA POR TIPO DE CAMPAÑA
+// ============================================================
+router.post('/cargar-tipo-campana', async (req, res) => {
+    try {
+        const { instanceId, tipo } = req.body;
+        if (!instanceId || !tipo) return res.status(400).json({ ok: false, error: 'Faltan datos' });
+
+        const plantilla = obtenerCampanaPorTipo(instanceId, tipo.trim());
+        if (plantilla) {
+            return res.json({ ok: true, datos: plantilla });
+        } else {
+            return res.json({ ok: true, datos: null });
+        }
+    } catch (err) {
+        console.error('❌ Error en /api/envio/cargar-tipo-campana:', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ============================================================
+// 3. SUBIR IMAGEN
+// ============================================================
 router.post('/imagen', upload.single('imagen'), async (req, res) => {
     try {
         const { instanceId } = req.body;
-        if (!instanceId || !req.file) return res.status(400).json({ ok: false, error: 'Datos inválidos' });
-        const estado = getEstadoInstancia(instanceId);
-        if (!estado) return res.status(400).json({ ok: false, error: 'Estado inexistente' });
+        if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
+        if (!req.file) return res.status(400).json({ ok: false, error: 'No se recibió archivo' });
 
-        if (estado.imagenGuardada && estado.imagenGuardada !== req.file.filename) {
-            const anterior = path.join(__dirname, '..', 'uploads', estado.imagenGuardada);
-            try { if (fs.existsSync(anterior)) fs.unlinkSync(anterior); } catch (err) {}
-        }
         guardarImagen(instanceId, req.file.filename);
+        
+        const estado = getEstadoInstancia(instanceId);
+        if (estado && estado.tipoCampana && estado.tipoCampana.trim() !== '') {
+            guardarCampanaPorTipo(instanceId, estado.tipoCampana.trim(), {
+                mensajes: estado.mensajesGuardados || [],
+                linkPreviewActivo: estado.linkPreviewActivo !== false,
+                imagenGuardada: req.file.filename
+            });
+        }
+
         return res.json({ ok: true, archivo: req.file.filename });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
+    } catch (err) {
+        console.error('❌ Error en /api/envio/imagen:', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
-router.delete('/imagen', async (req, res) => {
-    try {
-        if (!req.body.instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
-        eliminarImagen(req.body.instanceId);
-        return res.json({ ok: true });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
-});
-
+// ============================================================
+// 4. INICIAR CAMPAÑA (¡CON EL DISPARADOR DEL SCHEDULER!)
+// ============================================================
 router.post('/iniciar', async (req, res) => {
     try {
         const { instanceId } = req.body;
         if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
 
-        const client = sessionManager.getClient(instanceId);
-        if (!client) return res.status(400).json({ ok: false, error: 'Cliente no conectado' });
-
-        const estadoInstancia = sessionManager.getEstado(instanceId);
-        if (!estadoInstancia || !estadoInstancia.ready) {
-            return res.status(400).json({ ok: false, error: 'WhatsApp aún se está iniciando' });
-        }
-
         const estado = getEstadoInstancia(instanceId);
-        if (!estado || !Array.isArray(estado.contactosCargados) || estado.contactosCargados.length === 0) {
+        if (!estado) return res.status(400).json({ ok: false, error: 'Estado inexistente' });
+
+        if (!estado.contactosCargados || estado.contactosCargados.length === 0) {
             return res.status(400).json({ ok: false, error: 'No hay contactos cargados' });
         }
-        const mensajes = (estado.mensajesGuardados || []).filter(Boolean);
-        if (mensajes.length === 0) return res.status(400).json({ ok: false, error: 'No hay mensajes cargados' });
+        if (!estado.mensajesGuardados || !estado.mensajesGuardados[0]) {
+            return res.status(400).json({ ok: false, error: 'Falta el Mensaje 1' });
+        }
 
-        resetearContadores(instanceId);
-        actualizarEstado(instanceId, { enviando: true, pausado: false, campanaFinalizada: false });
+        // 1. Marcamos el estado como enviando
+        estado.enviando = true;
+        estado.pausado = false;
+        estado.campanaFinalizada = false;
         guardarEstadoSeguro(instanceId);
-        reiniciarScheduler(instanceId);
-
-        if (!(await scheduler.iniciar(instanceId))) return res.status(500).json({ ok: false, error: 'No se pudo iniciar' });
-
-        return res.json({ ok: true, total: estado.contactosCargados.length, monitor: `/monitor?instanceId=${instanceId}` });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
-});
-
-router.post('/pausar', async (req, res) => {
-    try {
-        if (!req.body.instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
-        actualizarEstado(req.body.instanceId, { enviando: false, pausado: true });
-        scheduler.detener(req.body.instanceId);
-        return res.json({ ok: true });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
-});
-
-router.post('/reanudar', async (req, res) => {
-    try {
-        const { instanceId } = req.body;
-        if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
         
-        const estadoInstancia = sessionManager.getEstado(instanceId);
-        if (!estadoInstancia || !estadoInstancia.ready) return res.status(400).json({ ok: false, error: 'WhatsApp aún no está listo' });
-
-        actualizarEstado(instanceId, { enviando: true, pausado: false });
-        reiniciarScheduler(instanceId);
+        // 2. ¡AQUÍ ESTÁ LA MAGIA! Le damos la orden al Scheduler de arrancar
+        console.log(`⚙️ Activando Scheduler para instancia: ${instanceId}`);
         await scheduler.iniciar(instanceId);
-        return res.json({ ok: true });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
-});
+        
+        console.log(`🚀 Campaña iniciada y Scheduler activado correctamente para: ${instanceId}`);
+        
+        // 3. Devolvemos JSON válido SIEMPRE
+        return res.json({ 
+            ok: true, 
+            message: 'Campaña iniciada correctamente',
+            monitor: `/monitor?instanceId=${instanceId}`
+        });
 
-router.post('/detener', async (req, res) => {
-    try {
-        const { instanceId } = req.body;
-        if (!instanceId) return res.status(400).json({ ok: false, error: 'instanceId requerido' });
-        actualizarEstado(instanceId, { enviando: false, pausado: false, campanaFinalizada: true });
-        guardarEstadoSeguro(instanceId);
-        scheduler.detener(instanceId);
-        return res.json({ ok: true });
-    } catch (err) { return res.status(500).json({ ok: false, error: err.message }); }
+    } catch (err) {
+        console.error('❌ Error en /api/envio/iniciar:', err);
+        return res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
 module.exports = router;

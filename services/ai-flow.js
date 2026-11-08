@@ -5,6 +5,7 @@ const aiEngine = require('../core/ai/ai-engine');
 const notificationService = require('./notification-service');
 const logger = require('../core/logger/logger');
 const { simularEscrituraHumana } = require('./formateo');
+const { enviarTexto } = require('./whatsapp-send');
 const { registrarBaja } = require('./bajas');
 
 class AIFlow {
@@ -27,7 +28,7 @@ class AIFlow {
         const analisis = await aiEngine.analizar(context.texto, {
             numero: context.numero,
             nombre: context.nombre,
-            rubro: context.estadoTemporal?.rubro || '',
+            rubro: context.rubro || context.estadoTemporal?.rubro || '',
             respuestaInfoPersonalizada: context.estadoTemporal?.respuestaInfo || '',
             tipoCampana: context.estadoTemporal?.tipoCampana || '',
             respuestasInfoPorTipo: context.estadoTemporal?.respuestasInfoPorTipo || {}
@@ -61,20 +62,35 @@ class AIFlow {
     }
 
     async enviarRespuesta(context) {
+    try {
+        // ✅ SIMULACIÓN DE ESCRITURA HUMANA (Compatible con Baileys)
         try {
-            await simularEscrituraHumana(context.client, context.chatId, context.respuestaIA);
-            await context.client.sendMessage(context.chatId, context.respuestaIA);
-            logger.whatsapp(`Respuesta IA enviada a ${context.numero}`);
-            crmFlow.registrarRespuestaIA(context);
-        } catch (err) {
-            logger.error('Error enviando respuesta IA', err);
-            crmFlow.registrarEvento?.(context.numero, {
-                tipo: 'ERROR_IA',
-                descripcion: err.message,
-                fecha: new Date().toISOString()
-            });
+            if (context.client && typeof context.client.sendPresenceUpdate === 'function') {
+                // Cliente Baileys: usa sendPresenceUpdate
+                await context.client.sendPresenceUpdate('composing', context.chatId);
+                const tiempoSimulacion = Math.min(Math.max((context.respuestaIA || '').length * 30, 1500), 4000);
+                await new Promise(r => setTimeout(r, tiempoSimulacion));
+                await context.client.sendPresenceUpdate('paused', context.chatId);
+            } else {
+                // Fallback para whatsapp-web.js si aún existe
+                await simularEscrituraHumana(context.client, context.chatId, context.respuestaIA);
+            }
+        } catch (e) {
+            console.warn('⚠️ Error simulando escritura:', e.message);
         }
+
+        await enviarTexto(context.client, context.chatId, context.respuestaIA);
+        logger.whatsapp(`Respuesta IA enviada a ${context.numero}`);
+        crmFlow.registrarRespuestaIA(context);
+    } catch (err) {
+        logger.error('Error enviando respuesta IA', err);
+        crmFlow.registrarEvento?.(context.numero, {
+            tipo: 'ERROR_IA',
+            descripcion: err.message,
+            fecha: new Date().toISOString()
+        });
     }
+}
 
     async registrarBaja(context) {
         try {

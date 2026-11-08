@@ -4,6 +4,11 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const fs = require('fs');
 const path = require('path');
+const { handleInboundMessage } = require('./inbound-message-handler');
+const { extraerTextoMensaje } = require('./conversation-context');
+
+// ✅ IMPORTACIONES CRÍTICAS
+const { guardarInstancia, eliminarInstancia } = require('./instancias-persistencia');
 const { getEstadoInstancia, guardarEstadoSeguro } = require('../state/estado');
 const { resolverContacto } = require('./contact-resolver');
 
@@ -20,9 +25,15 @@ function setIO(socketIO) { io = socketIO; }
 function emitToUser(userId, event, data) {
     if (!io) return;
     const uid = String(userId);
-    io.to(uid).emit(event, data);
-    if (uid === '1788780543868') io.to('543868').emit(event, data);
-    if (data && data.instanceId) io.to(data.instanceId).emit(event, data);
+    const payload = data || {};
+    const rooms = [`user_${uid}`, uid];
+    if (payload.instanceId) rooms.push(String(payload.instanceId), `user_${payload.instanceId}`);
+    const seen = new Set();
+    for (const room of rooms) {
+        if (seen.has(room)) continue;
+        seen.add(room);
+        io.to(room).emit(event, payload);
+    }
 }
 
 function registerSocket(userId, socketId) {
@@ -62,10 +73,9 @@ function extractUserId(userIdInput) {
     return String(userIdInput || 'unknown');
 }
 
-// ✅ FUNCIÓN CRÍTICA: Normaliza cualquier número a su forma base (sin 54, 9, 0, ni espacios)
 function normalizarNumero(num) {
     if (!num) return '';
-    let n = String(num).replace(/\D/g, ''); // Solo dígitos
+    let n = String(num).replace(/\D/g, '');
     if (n.startsWith('549')) n = n.substring(3);
     else if (n.startsWith('54')) n = n.substring(2);
     else if (n.startsWith('0')) n = n.substring(1);
@@ -113,9 +123,12 @@ async function startSession(instanceId, userIdInput) {
             
             if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
                 try { fs.rmSync(authDir, { recursive: true, force: true }); } catch (e) {}
+                eliminarInstancia(userId, instanceId);
                 instances[instanceId].ready = false;
                 instances[instanceId].qr = null;
                 emitToUser(userId, 'disconnected', { instanceId, reason: 'logged_out' });
+                emitToUser(userId, 'whatsapp_disconnected', { instanceId, reason: 'logged_out' });
+                emitToUser(userId, 'instances_update', { instanceId, instancias: getUserInstancesResumen(userId) });
                 delete instances[instanceId];
                 return;
             }
@@ -135,99 +148,42 @@ async function startSession(instanceId, userIdInput) {
             instances[instanceId].phoneNumber = phoneNumber;
             instances[instanceId].reconnectAttempts = 0;
             console.log(`\n✅ WHATSAPP READY\nNúmero: ${phoneNumber}\n`);
-            emitToUser(userId, 'ready', { instanceId, phoneNumber });
+            guardarInstancia(userId, instanceId, {
+                numero: phoneNumber,
+                listo: true,
+                fechaCreacion: new Date().toISOString()
+            });
+            emitToUser(userId, 'ready', { instanceId, phoneNumber, numero: phoneNumber });
+            emitToUser(userId, 'whatsapp_ready', { instanceId, phoneNumber, numero: phoneNumber });
+            emitToUser(userId, 'instances_update', { instanceId, instancias: getUserInstancesResumen(userId) });
         }
     });
 
-    // ✅ MANEJO DE MENSAJES ENTRANTES Y RESPUESTA A INFO
+    // ✅ MANEJO DE MENSAJES ENTRANTES (Delegado al pipeline completo)
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe || msg.message.protocolMessage) return;
 
+        const rawFrom = msg.key.remoteJid;
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '';
+        
         try {
-            const from = msg.key.remoteJid;
-            const text = msg.message.conversation || msg.message.extendedTextMessage?.text || msg.message.imageMessage?.caption || '';
-            const textoLimpio = text.toLowerCase().trim();
+            console.log(`💬 Mensaje recibido de ${rawFrom}: "${String(text || '').substring(0, 50)}"`);
+            emitToUser(userId, 'message_received', { instanceId, from: rawFrom, text, timestamp: msg.messageTimestamp });
 
-            console.log(`💬 Mensaje recibido de ${from}: "${text.substring(0, 50)}"`);
-            emitToUser(userId, 'message_received', { instanceId, from, text, timestamp: msg.messageTimestamp });
-
-            // 1. OBTENER ESTADO DE FORMA SEGURA
-            let estado = {};
-            try {
-                if (typeof getEstadoInstancia === 'function') estado = getEstadoInstancia(instanceId) || {};
-                else if (typeof getEstado === 'function') estado = getEstado(instanceId) || {};
-            } catch (e) {
-                console.warn('⚠️ No se pudo obtener el estado:', e.message);
-            }
-
-            // 2. RESOLVER CONTACTO (Usando el módulo blindado, CERO .includes() directos)
-            let contacto = { numero: from.split('@')[0].replace(/[^0-9]/g, ''), NOMBRE: 'Cliente', RUBRO: 'Sin rubro' };
-            try {
-                if (typeof resolverContacto === 'function') {
-                    const res = await resolverContacto(msg, estado.contactosCargados || []);
-                    if (res && res.numero) contacto = res;
-                }
-            } catch (e) {
-                console.warn('⚠️ Error en resolverContacto:', e.message);
-            }
-
-            const numeroReal = contacto.numero;
-            const nombreReal = contacto.NOMBRE || 'Cliente';
-            const rubroReal = contacto.RUBRO || 'Sin rubro';
-
-            console.log(`✅ Contacto resuelto: ${nombreReal} (${numeroReal})`);
-
-            // 3. DETECCIÓN DE INFO
-            const esInfo = textoLimpio === 'info' || textoLimpio === 'info!' || 
-                           textoLimpio.includes('quiero info') || textoLimpio.includes('más info') || 
-                           textoLimpio.includes('mas info') || textoLimpio.includes('información') || 
-                           textoLimpio.includes('informacion');
-
-            if (esInfo) {
-                console.log(`🔔 Detectado INFO de ${numeroReal}`);
-                
-                let respuestaAuto = '';
-                if (estado?.respuestasInfoPorTipo && estado.tipoCampana && estado.respuestasInfoPorTipo[estado.tipoCampana]) {
-                    respuestaAuto = estado.respuestasInfoPorTipo[estado.tipoCampana];
-                } else if (estado?.respuestaInfo) {
-                    respuestaAuto = estado.respuestaInfo;
-                }
-
-                if (respuestaAuto) {
-                    const respuestaFinal = respuestaAuto
-                        .replace(/\{\{\s*NOMBRE\s*\}\}/gi, nombreReal)
-                        .replace(/\{\s*NOMBRE\s*\}/gi, nombreReal)
-                        .replace(/\bNOMBRE\b/gi, nombreReal)
-                        .replace(/\{\{\s*RUBRO\s*\}\}/gi, rubroReal)
-                        .replace(/\{\s*RUBRO\s*\}/gi, rubroReal)
-                        .replace(/\bRUBRO\b/gi, rubroReal);
-
-                    try {
-                        await sock.sendPresenceUpdate('composing', from);
-                        await new Promise(r => setTimeout(r, 1500));
-                        await sock.sendPresenceUpdate('paused', from);
-                    } catch (e) { /* ignorar error de presencia */ }
-
-                    await sock.sendMessage(from, { text: respuestaFinal });
-                    console.log(`✅ Respuesta enviada a ${numeroReal}`);
-                }
-
-                // 4. NOTIFICACIÓN AL ADMIN
-                const numeroAdmin = '5493513043371';
-                const jidAdmin = `${numeroAdmin}@s.whatsapp.net`;
-                const notif = `🔔 *NUEVA RESPUESTA INFO*\n\n👤 *Contacto:* ${nombreReal}\n📞 *Número:* +${numeroReal}\n🏷️ *Rubro:* ${rubroReal}\n💬 *Mensaje:* "${text}"\n⏰ ${new Date().toLocaleString('es-AR')}`;
-                
-                try {
-                    await sock.sendMessage(jidAdmin, { text: notif });
-                    console.log(`✅ Notificación enviada al admin`);
-                } catch (e) {
-                    console.error('❌ Error enviando notificación:', e.message);
-                }
-            }
+            // Delegar al pipeline central (Contact Resolver con soporte @lid, CRM, IA/Reglas, Sockets, Notificación)
+            await handleInboundMessage({
+                msg,
+                client: sock,
+                userId,
+                instanceId,
+                numeroInstancia: instances[instanceId] && instances[instanceId].phoneNumber,
+                sessions: null,
+                io
+            });
         } catch (error) {
-            console.error('❌ Error crítico en messages.upsert:', error);
+            console.error('❌ Error crítico procesando mensaje entrante:', error);
         }
     });
 
@@ -261,17 +217,82 @@ function getEstado(instanceId) { const inst = instances[instanceId]; if (!inst) 
 function getPendingQr(instanceId) { return instances[instanceId]?.qr || null; }
 
 async function restoreAllSessions() {
-    if (!fs.existsSync(BAILEYS_SESSIONS_DIR)) return;
-    const folders = fs.readdirSync(BAILEYS_SESSIONS_DIR).filter(f => fs.statSync(path.join(BAILEYS_SESSIONS_DIR, f)).isDirectory());
-    for (const folder of folders) {
-        const instanceId = folder;
-        const authDir = path.join(BAILEYS_SESSIONS_DIR, folder);
-        const hasCreds = fs.readdirSync(authDir).some(f => f.includes('creds'));
-        if (!hasCreds) continue;
-        try {
-            const userIdMatch = instanceId.match(/inst_(\d+)_/);
-            await startSession(instanceId, userIdMatch ? userIdMatch[1] : 'unknown');
-        } catch (err) { console.error(`❌ Error restaurando ${instanceId}:`, err.message); }
+    console.log(`🔄 Restaurando sesiones Baileys...`);
+    const INSTANCIAS_FILE = path.join(__dirname, '..', 'data', 'instancias.json');
+    const SESSIONS_DIR = path.join(__dirname, '..', 'baileys_sessions');
+
+    try {
+        let data = {};
+        if (fs.existsSync(INSTANCIAS_FILE)) {
+            try {
+                data = JSON.parse(fs.readFileSync(INSTANCIAS_FILE, 'utf8'));
+            } catch (_) { data = {}; }
+        }
+
+        // Auto-recuperación si instancias.json está vacío pero hay sesiones con creds.json
+        if (Object.keys(data).length === 0 && fs.existsSync(SESSIONS_DIR)) {
+            const carpetas = fs.readdirSync(SESSIONS_DIR).filter(f => {
+                const p = path.join(SESSIONS_DIR, f);
+                return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'creds.json'));
+            });
+            for (const carpeta of carpetas) {
+                const match = carpeta.match(/^inst_([^_]+)_/);
+                const uid = match ? match[1] : '1788780543868';
+                if (!data[uid]) data[uid] = [];
+                data[uid].push({ id: carpeta, listo: true, fechaCreacion: new Date().toISOString() });
+            }
+            if (Object.keys(data).length > 0) {
+                try { fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(data, null, 2)); } catch (_) {}
+            }
+        }
+
+        let instanciasLimpias = 0;
+        let instanciasRestauradas = 0;
+
+        for (const userId of Object.keys(data)) {
+            const instanciasUsuario = data[userId] || [];
+            const instanciasValidas = [];
+
+            for (const inst of instanciasUsuario) {
+                const instanceId = inst.id || inst.instanceId;
+                const sessionPath = path.join(SESSIONS_DIR, instanceId);
+
+                if (!fs.existsSync(sessionPath)) {
+                    console.log(`🗑️ Instancia fantasma detectada y eliminada: ${instanceId}`);
+                    instanciasLimpias++;
+                    continue;
+                }
+
+                const archivosAuth = fs.readdirSync(sessionPath).filter(f => f.includes('app-state') || f.includes('session') || f.includes('creds'));
+                if (archivosAuth.length === 0) {
+                    console.log(`🗑️ Instancia corrupta eliminada: ${instanceId}`);
+                    fs.rmSync(sessionPath, { recursive: true, force: true });
+                    instanciasLimpias++;
+                    continue;
+                }
+
+                instanciasValidas.push(inst);
+                instanciasRestauradas++;
+                try {
+                    // Argumentos corregidos: instanceId primero, userId segundo
+                    await startSession(instanceId, userId);
+                    console.log(`✅ Sesión restaurada: ${instanceId}`);
+                } catch (err) {
+                    console.error(`❌ Error restaurando ${instanceId}:`, err.message);
+                }
+            }
+
+            if (instanciasValidas.length > 0) {
+                data[userId] = instanciasValidas;
+            } else {
+                delete data[userId];
+            }
+        }
+
+        fs.writeFileSync(INSTANCIAS_FILE, JSON.stringify(data, null, 2));
+        console.log(`✅ Restauración completada: ${instanciasRestauradas} activas, ${instanciasLimpias} eliminadas automáticamente`);
+    } catch (error) {
+        console.error('❌ Error restaurando sesiones:', error);
     }
 }
 

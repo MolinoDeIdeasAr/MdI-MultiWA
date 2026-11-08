@@ -114,6 +114,8 @@ router.get(
              ok:true,
              enviando:
                  !!estado.enviando,
+             pausado:
+                 !!estado.pausado,
              campanaFinalizada:
                  !!estado.campanaFinalizada,
   	 //--------------------------------------------------
@@ -230,6 +232,55 @@ try {
      return res.json({
          ok: true,
          mensaje: 'Campaña pausada'
+     });
+ }
+ catch (err) {
+     console.error(err);
+     return res.status(500).json({
+         ok: false,
+         error: err.message
+     });
+ }
+});
+
+//==============================================================
+// POST /reanudar
+//==============================================================
+
+router.post('/reanudar', async (req, res) => {
+try {
+     const instanceId =
+         req.body.instanceId ||
+         req.query.instanceId;
+
+     if (!instanceId) {
+         return res.status(400).json({
+             ok: false,
+             error: 'instanceId requerido'
+         });
+     }
+
+     const estado =
+         getEstadoInstancia(instanceId);
+
+     if (!estado) {
+         return res.status(404).json({
+             ok: false,
+             error: 'Instancia inexistente'
+         });
+     }
+
+     estado.enviando = true;
+     estado.pausado = false;
+     guardarEstadoSeguro(instanceId);
+
+     if (scheduler.iniciar) {
+         await scheduler.iniciar(instanceId);
+     }
+
+     return res.json({
+         ok: true,
+         mensaje: 'Campaña reanudada'
      });
  }
  catch (err) {

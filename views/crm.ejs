@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM - MdI MultiWA</title>
+    <link rel="icon" type="image/x-icon" href="/logo_MdI.ico">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 20px; }
+        .crm-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 15px; }
+        .crm-header h1 { margin: 0; font-size: 24px; color: #38bdf8; }
+        .stats { background: #1e293b; padding: 10px 20px; border-radius: 8px; font-weight: bold; }
+        
+        .search-box { width: 100%; max-width: 400px; padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: white; margin-bottom: 20px; }
+        
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #334155; }
+        th { background: #0f172a; color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 12px; }
+        tr:hover { background: #334155; }
+        
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+        .badge-activo { background: #10b981; color: white; }
+        .badge-nuevo { background: #3b82f6; color: white; }
+        .badge-baja { background: #ef4444; color: white; }
+        
+        .btn-ver { background: #38bdf8; color: #0f172a; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; text-decoration: none; }
+        .btn-ver:hover { background: #7dd3fc; }
+        
+        .empty-state { text-align: center; padding: 40px; color: #94a3b8; }
+        .nav-link { color: #94a3b8; text-decoration: none; margin-right: 15px; }
+        .nav-link:hover { color: #38bdf8; }
+    </style>
+</head>
+<body>
+
+    <div style="margin-bottom: 20px;">
+        <a href="/" class="nav-link">⬅ Volver al Panel</a>
+        <a href="/monitor" class="nav-link">📊 Monitor</a>
+    </div>
+
+    <div class="crm-header">
+        <h1>📇 Gestión de Clientes (CRM)</h1>
+        <div class="stats">Total: <%= totalClientes %> contactos</div>
+    </div>
+
+    <input type="text" id="searchInput" class="search-box" placeholder="🔍 Buscar por nombre, número o rubro..." onkeyup="filterTable()">
+
+    <% if (clientes.length === 0) { %>
+        <div class="empty-state">
+            <h3>Aún no hay clientes registrados</h3>
+            <p>Los contactos aparecerán aquí automáticamente cuando respondan a tus campañas o escriban "INFO".</p>
+        </div>
+    <% } else { %>
+        <table id="crmTable">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Número (WhatsApp)</th>
+                    <th>Rubro</th>
+                    <th>Estado</th>
+                    <th>Última Interacción</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% clientes.forEach(c => { %>
+                    <tr>
+                        <td><strong><%= c.nombre || 'Desconocido' %></strong></td>
+                        <td><a href="https://wa.me/<%= c.numero %>" target="_blank" style="color:#38bdf8; text-decoration:none;">+<%= c.numero %></a></td>
+                        <td><%= c.rubro || 'Sin rubro' %></td>
+                        <td>
+                            <% 
+                                let estadoClass = 'badge-nuevo';
+                                let estadoText = c.estado || 'NUEVO';
+                                if(estadoText.toUpperCase() === 'ACTIVO') estadoClass = 'badge-activo';
+                                if(estadoText.toUpperCase() === 'BAJA') estadoClass = 'badge-baja';
+                            %>
+                            <span class="badge <%= estadoClass %>"><%= estadoText %></span>
+                        </td>
+                        <td style="font-size: 12px; color: #94a3b8;">
+                            <%= c.ultimaInteraccion ? new Date(c.ultimaInteraccion).toLocaleString('es-AR') : 'Sin registros' %>
+                        </td>
+                        <td>
+                            <a href="/crm/<%= c.numero %>" class="btn-ver">Ver Chat</a>
+                        </td>
+                    </tr>
+                <% }) %>
+            </tbody>
+        </table>
+    <% } %>
+
+    <script>
+        function filterTable() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toUpperCase();
+            const table = document.getElementById('crmTable');
+            const tr = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < tr.length; i++) {
+                const tdNombre = tr[i].getElementsByTagName('td')[0];
+                const tdNumero = tr[i].getElementsByTagName('td')[1];
+                const tdRubro = tr[i].getElementsByTagName('td')[2];
+                if (tdNombre || tdNumero || tdRubro) {
+                    const txtValue = (tdNombre.textContent + tdNumero.textContent + tdRubro.textContent).toUpperCase();
+                    tr[i].style.display = txtValue.indexOf(filter) > -1 ? "" : "none";
+                }
+            }
+        }
+    </script>
+</body>
+</html>

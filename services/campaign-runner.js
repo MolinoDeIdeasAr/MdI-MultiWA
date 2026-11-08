@@ -13,25 +13,17 @@ const RESULTADO = { OK: "OK", PAUSA: "PAUSA", BAJA: "BAJA", FINALIZADA: "FINALIZ
 function reemplazarVariables(texto, nombre, rubro, tipo) {
     if (!texto) return '';
     
-    // Si el nombre viene como el ID raro de WhatsApp, usamos "Contacto" para que se vea profesional
     const nombreLimpio = (nombre && !/^\d{10,}$/.test(nombre) && nombre !== 'unknown') ? nombre : 'Contacto';
     const rubroLimpio = rubro || '';
     const tipoLimpio = tipo || '';
 
     return texto
-        // 1. Busca {{NOMBRE}} o {{ NOMBRE }}
         .replace(/\{\{\s*NOMBRE\s*\}\}/gi, nombreLimpio)
-        // 2. Busca {NOMBRE} o { NOMBRE }
         .replace(/\{\s*NOMBRE\s*\}/gi, nombreLimpio)
-        // 3. Fallback: Busca la palabra NOMBRE sola (por si el frontend la limpió)
         .replace(/\bNOMBRE\b/gi, nombreLimpio)
-        
-        // Lo mismo para RUBRO
         .replace(/\{\{\s*RUBRO\s*\}\}/gi, rubroLimpio)
         .replace(/\{\s*RUBRO\s*\}/gi, rubroLimpio)
         .replace(/\bRUBRO\b/gi, rubroLimpio)
-        
-        // Lo mismo para TIPO
         .replace(/\{\{\s*TIPO\s*\}\}/gi, tipoLimpio)
         .replace(/\{\s*TIPO\s*\}/gi, tipoLimpio)
         .replace(/\bTIPO\b/gi, tipoLimpio);
@@ -46,7 +38,10 @@ async function run(instanceId) {
         if (!infoInstancia || !infoInstancia.ready) return { tipo: RESULTADO.PAUSA, pausa: 5000 };
 
         const client = sessionManager.getClient(instanceId);
-        if (!client) return { tipo: RESULTADO.PAUSA, pausa: 5000 };
+        if (!client) {
+            console.warn(`⚠️ El cliente de WhatsApp no está listo o no se encontró para ${instanceId}. Pausando...`);
+            return { tipo: RESULTADO.PAUSA, pausa: 5000 };
+        }
 
         if (!Array.isArray(estado.contactosCargados) || estado.contactosCargados.length === 0) {
             return { tipo: RESULTADO.PAUSA, pausa: 5000 };
@@ -96,6 +91,25 @@ async function procesarContacto(instanceId, client, estado, contacto) {
 async function enviarMensaje(instanceId, client, estado, contacto, numero) {
     try {
         console.log(`📤 Enviando a ${numero}...`);
+        
+        // ✅ NUEVO: Verificar si el número existe en WhatsApp antes de enviar
+        let existeEnWhatsApp = true;
+        try {
+            if (typeof client.onWhatsApp === 'function') {
+                const resultado = await client.onWhatsApp(`${numero}@s.whatsapp.net`);
+                if (resultado && resultado.length > 0) {
+                    existeEnWhatsApp = resultado[0].exists;
+                    console.log(`✅ Número ${numero} ${existeEnWhatsApp ? 'EXISTE' : 'NO EXISTE'} en WhatsApp`);
+                }
+            }
+        } catch (err) {
+            console.warn(`⚠️ No se pudo verificar si ${numero} existe en WhatsApp: ${err.message}`);
+        }
+
+        if (!existeEnWhatsApp) {
+            return marcarError(instanceId, estado, contacto, "El número no existe en WhatsApp");
+        }
+
         const destino = `${numero}@s.whatsapp.net`;
         
         const mensajes = (estado.mensajesGuardados || []).filter(Boolean);
@@ -103,30 +117,41 @@ async function enviarMensaje(instanceId, client, estado, contacto, numero) {
 
         const mensajeBase = antiBan.seleccionarMensaje ? antiBan.seleccionarMensaje(instanceId, mensajes) : mensajes[0];
         
-        // Obtener datos del contacto
         const nombre = contacto.nombre || contacto.NOMBRE || "Contacto";
         const rubro = estado?.rubro || estado?.tipoCampana || "";
         const tipoCampana = estado?.tipoCampana || "";
         
-        // Procesar spintax y luego reemplazar variables
         const textoConSpintax = procesarSpintax(mensajeBase);
         const textoFinal = reemplazarVariables(textoConSpintax, nombre, rubro, tipoCampana);
 
+        console.log(`📝 Texto a enviar: "${textoFinal.substring(0, 80)}..."`);
+
         const opcionesEnvio = { linkPreview: estado.linkPreviewActivo !== false };
+        let resultadoEnvio = null;
+
         if (estado.imagenGuardada) {
             const archivo = path.join(__dirname, "..", "uploads", estado.imagenGuardada);
             if (fs.existsSync(archivo)) {
-                await client.sendMessage(destino, { image: { url: archivo }, caption: textoFinal, ...opcionesEnvio });
+                console.log(`🖼️ Enviando con imagen: ${estado.imagenGuardada}`);
+                resultadoEnvio = await client.sendMessage(destino, { image: { url: archivo }, caption: textoFinal, ...opcionesEnvio });
             } else {
-                await client.sendMessage(destino, { text: textoFinal, ...opcionesEnvio });
+                console.log(`⚠️ Imagen no existe: ${archivo}. Enviando solo texto.`);
+                resultadoEnvio = await client.sendMessage(destino, { text: textoFinal, ...opcionesEnvio });
             }
         } else {
-            await client.sendMessage(destino, { text: textoFinal, ...opcionesEnvio });
+            console.log(`📄 Enviando solo texto`);
+            resultadoEnvio = await client.sendMessage(destino, { text: textoFinal, ...opcionesEnvio });
+        }
+
+        // ✅ NUEVO: Loguear el resultado real de WhatsApp
+        if (resultadoEnvio) {
+            console.log(`✅ WhatsApp confirmó envío. Message ID: ${resultadoEnvio.key?.id || 'N/A'}`);
         }
 
         return marcarExito(instanceId, estado, contacto, destino);
     } catch (err) {
-        console.error("❌ Error en enviarMensaje:", err.message);
+        console.error(`❌ Error en enviarMensaje a ${numero}:`, err.message);
+        console.error(err.stack);
         return marcarError(instanceId, estado, contacto, err.message);
     }
 }

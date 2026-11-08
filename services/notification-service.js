@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const crmFlow = require('./crm-flow');
+const { enviarTexto, esClienteBaileys } = require('./whatsapp-send');
 
 //==============================================================
 // NOTIFICATION SERVICE
@@ -77,39 +78,17 @@ class NotificationService {
         if (!telefono)
             return;
 
-        let destino =
-
-            `${telefono}@c.us`;
+        let destino = esClienteBaileys(context.client)
+            ? `${telefono}@s.whatsapp.net`
+            : `${telefono}@c.us`;
 
         try {
-
-            const chat =
-
-                await context.client.getNumberId(
-
-                    telefono
-
-                );
-
-            if (chat) {
-
-                destino =
-
-                    chat._serialized ||
-
-                    chat;
-
+            if (context.client && typeof context.client.getNumberId === 'function') {
+                const chat = await context.client.getNumberId(telefono);
+                if (chat) destino = chat._serialized || chat;
             }
-
-        }
-        catch (err) {
-
-            console.log(
-
-                'No se pudo resolver chatId del asesor.'
-
-            );
-
+        } catch (err) {
+            console.log('No se pudo resolver chatId del asesor.');
         }
 
         //----------------------------------------------
@@ -151,13 +130,7 @@ ${context.intencionIA}
 
         try {
 
-            await context.client.sendMessage(
-
-                destino,
-
-                mensaje
-
-            );
+            await enviarTexto(context.client, destino, mensaje);
 
             console.log(
 

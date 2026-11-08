@@ -5,7 +5,13 @@ const sessionManager = require('../services/session-manager');
 const { guardarEstado, cargarEstado, getDefaultEstado, getEstadoInstancia } = require('../state/estado');
 const { descargarGoogleSheets } = require('../services/google-drive');
 const xlsx = require('xlsx');
+const multer = require('multer');
 const { guardarInstancia } = require('../services/instancias-persistencia');
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }
+});
 
 // v1.2.0
 // CHANGELOG v1.2.0:
@@ -15,7 +21,7 @@ const { guardarInstancia } = require('../services/instancias-persistencia');
 //  • FIX ADICIONAL: Adaptación a Baileys. Se eliminó sessionManager.getUserSession 
 //    (que no existe en Baileys) y se reemplazó por getEstadoInstancia.
 
-router.post('/cargar', async (req, res) => {
+router.post('/cargar', upload.any(), async (req, res) => {
     try {
         const userId = req.session.userId;
         let instanceId = sessionManager.getActiveInstanceId(userId);
@@ -44,10 +50,21 @@ router.post('/cargar', async (req, res) => {
         let rubro = '';
         let sheet = null;
 
-        if (req.files && req.files.excel) {
-            const file = req.files.excel;
-            console.log(`📂 [ARCHIVO] ${file.name}`);
-            const workbook = xlsx.read(file.data, { type: 'buffer' });
+        let file = null;
+        if (req.file) {
+            file = req.file;
+        } else if (req.files) {
+            if (Array.isArray(req.files)) {
+                file = req.files.find(f => f.fieldname === 'excel') || req.files[0];
+            } else if (req.files.excel) {
+                file = Array.isArray(req.files.excel) ? req.files.excel[0] : req.files.excel;
+            }
+        }
+
+        if (file) {
+            console.log(`📂 [ARCHIVO] ${file.originalname || file.name}`);
+            const buffer = file.buffer || file.data;
+            const workbook = xlsx.read(buffer, { type: 'buffer' });
             sheet = workbook.Sheets[workbook.SheetNames[0]];
             datos = xlsx.utils.sheet_to_json(sheet, { defval: '' });
         } else if (req.query?.urlDrive || req.body?.urlDrive) {

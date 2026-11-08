@@ -55,6 +55,7 @@ tbody tr:hover{background:#162032;}
 <span id="tituloCampana">
 <% if (estado && estado.rubro) { %><span class="rubro-badge">🏢 <%= estado.rubro %></span><% } %>
 <% if (estado && estado.tipoCampana) { %><span class="campana-badge">🏷️ <%= estado.tipoCampana %></span><% } %>
+<a href="/crm" style="background: #38bdf8; color: #0f172a; padding: 10px 15px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-right: 10px;">📇 CRM Clientes</a>
 </span>
 </h1>
 
@@ -243,15 +244,27 @@ async function actualizar(){
         // ESTADO DE LA CAMPAÑA
         //--------------------------------------------------
         const estado = document.getElementById('estadoWhatsapp');
+        const btnPausar = document.getElementById('btnPausar');
         if(data.enviando){
             estado.className="status online";
             estado.innerHTML="🟢 Campaña en ejecución";
+            btnPausar.innerText = "⏸ Pausar";
+            btnPausar.className = "btn-orange";
         } else if(data.campanaFinalizada){
             estado.className="status warning";
             estado.innerHTML="✅ Campaña finalizada";
+            btnPausar.innerText = "⏸ Pausar";
+            btnPausar.className = "btn-orange";
+        } else if(data.pausado){
+            estado.className="status warning";
+            estado.innerHTML="⏸ Campaña pausada";
+            btnPausar.innerText = "▶ Reanudar";
+            btnPausar.className = "btn-green";
         } else {
             estado.className="status offline";
             estado.innerHTML="⏸ Sin actividad";
+            btnPausar.innerText = "⏸ Pausar";
+            btnPausar.className = "btn-orange";
         }
 
         //--------------------------------------------------
@@ -320,7 +333,10 @@ actualizar();
 document.getElementById('btnActualizar').onclick=actualizar;
 
 document.getElementById('btnPausar').onclick=()=>{
-    fetch('/pausar',{
+    const btn = document.getElementById('btnPausar');
+    const esReanudar = btn.innerText.includes('Reanudar');
+    const endpoint = esReanudar ? '/api/monitor/reanudar' : '/api/monitor/pausar';
+    fetch(endpoint,{
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ instanceId: instanceId })
@@ -328,10 +344,10 @@ document.getElementById('btnPausar').onclick=()=>{
     .then(r=>r.json())
     .then(d=>{
         if(d.ok){
-            alert('⏸ Campaña pausada');
+            alert(esReanudar ? '▶ Campaña reanudada' : '⏸ Campaña pausada');
             actualizar();
         } else {
-            alert('❌ ' + (d.error || 'No se pudo pausar'));
+            alert('❌ ' + (d.error || (esReanudar ? 'No se pudo reanudar' : 'No se pudo pausar')));
         }
     })
     .catch(e=>alert('❌ ' + e.message));
@@ -339,7 +355,7 @@ document.getElementById('btnPausar').onclick=()=>{
 
 document.getElementById('btnDetener').onclick=()=>{
     if(!confirm("¿Detener campaña?")) return;
-    fetch('/detener',{
+    fetch('/api/monitor/detener',{
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ instanceId: instanceId })
